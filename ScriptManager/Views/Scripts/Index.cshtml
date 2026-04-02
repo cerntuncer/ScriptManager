@@ -1,0 +1,43 @@
+﻿@model List<ScriptManager.Models.Script.ScriptListItemViewModel>
+
+<div class="panel-card">
+    <div class="panel-header">
+        <h3>Script List</h3>
+    </div>
+
+    <div class="table-toolbar">
+        <input id="scriptFilterInput" class="table-filter-input" placeholder="Script ara..." />
+    </div>
+
+    <div class="table-wrap custom-scroll">
+        <table class="modern-table" id="scriptTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Batch</th>
+                    <th>Developer</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.Name</td>
+                        <td>@item.Status</td>
+                        <td>@item.BatchName</td>
+                        <td>@item.DeveloperName</td>
+                        <td>@item.CreatedAt.ToString("dd.MM.yyyy")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        setupTableFilter("scriptFilterInput", "#scriptTable tbody tr");
+    </script>
+}

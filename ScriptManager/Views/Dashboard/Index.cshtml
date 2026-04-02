@@ -1,0 +1,117 @@
+﻿@model ScriptManager.Models.Dashboard.DashboardViewModel
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Script, release ve conflict durumlarını buradan takip edebilirsin.</p>
+    </div>
+
+    <div class="page-actions">
+        <button class="btn btn-primary modern-btn" onclick="openCreateScriptModal()">
+            Create Script
+        </button>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Toplam Yayın</div>
+        <div class="stat-value">@Model.TotalReleases</div>
+        <div class="stat-meta">Latest @Model.LatestReleases.FirstOrDefault()?.Version</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-label">Toplam Script</div>
+        <div class="stat-value">@Model.TotalScripts</div>
+        <div class="stat-meta">@Model.ReadyScripts Ready • @Model.TestingScripts Testing</div>
+    </div>
+
+    <div class="stat-card warning">
+        <div class="stat-label">Açık Conflict</div>
+        <div class="stat-value">@Model.OpenConflicts</div>
+        <div class="stat-meta">High priority</div>
+    </div>
+</div>
+
+<div class="content-grid">
+    <section class="panel-card">
+        <div class="panel-header">
+            <h3>Critical Alerts</h3>
+        </div>
+
+        <div class="alert-list">
+            @foreach (var item in Model.Alerts)
+            {
+                <div class="alert-row @item.Severity.ToString().ToLower()">
+                    <span class="alert-badge">[@item.Severity]</span>
+                    <span>@item.Message</span>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel-card chart-panel">
+        <div class="panel-header">
+            <h3>Overview</h3>
+        </div>
+
+        <div class="dummy-chart">
+            <div class="bar" style="height:55%"></div>
+            <div class="bar" style="height:72%"></div>
+            <div class="bar" style="height:48%"></div>
+            <div class="bar" style="height:84%"></div>
+            <div class="bar" style="height:65%"></div>
+            <div class="bar" style="height:76%"></div>
+        </div>
+    </section>
+
+    <section class="panel-card">
+        <div class="panel-header">
+            <h3>Latest Releases</h3>
+        </div>
+
+        <div class="table-wrap custom-scroll">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.LatestReleases)
+                    {
+                        <tr>
+                            <td>@item.Version</td>
+                            <td>@item.CreatedAt.ToString("dd MMM yyyy")</td>
+                            <td>
+                                <a class="btn btn-sm btn-table"
+                                   href="@Url.Action("Detail", "Releases", new { id = item.ReleaseId })">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel-card">
+        <div class="panel-header">
+            <h3>Recent Script Batches</h3>
+        </div>
+
+        <div class="batch-list">
+            @foreach (var item in Model.RecentBatches)
+            {
+                <div class="batch-row">
+                    <span class="batch-dot"></span>
+                    <span>@item.Name</span>
+                    <strong>@item.ScriptCount scripts</strong>
+                </div>
+            }
+        </div>
+    </section>
+</div>
