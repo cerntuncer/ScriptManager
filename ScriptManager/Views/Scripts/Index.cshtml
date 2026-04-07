@@ -1,8 +1,26 @@
-﻿@model List<ScriptManager.Models.Script.ScriptListItemViewModel>
+@model ScriptManager.Models.Script.ScriptsIndexViewModel
+@using System.Text.Json
+@using ScriptManager.Security
+@{
+    var canAuthor = ViewBag.CanAuthorScripts as bool? == true;
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Scripts</h1>
+        <p class="page-sub text-muted mb-0 small">Burada yalnızca script kaydı oluşturulur (batch seçilmez). Bir sürüme eklenebilmesi için scriptin <strong>Hazır</strong> durumunda olması gerekir (detaydan akış). Release için <a href="@Url.Action("Index", "Releases")">Releases</a>.</p>
+    </div>
+    @if (canAuthor)
+    {
+        <div class="page-actions">
+            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openScriptsPageCreateModal()">Yeni script</button>
+        </div>
+    }
+</div>
 
 <div class="panel-card">
     <div class="panel-header">
-        <h3>Script List</h3>
+        <h3>Script listesi</h3>
     </div>
 
     <div class="table-toolbar">
@@ -13,22 +31,44 @@
         <table class="modern-table" id="scriptTable">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Status</th>
+                    <th>Ad</th>
+                    <th>Durum</th>
                     <th>Batch</th>
-                    <th>Developer</th>
-                    <th>Date</th>
+                    <th>Geliştirici</th>
+                    <th>Rollback</th>
+                    <th>Önbellek</th>
+                    <th>Tarih</th>
+                    <th></th>
                 </tr>
             </thead>
-            <tbody>
-                @foreach (var item in Model)
+            <tbody id="scriptTableBody">
+                @foreach (var item in Model.Scripts)
                 {
                     <tr>
                         <td>@item.Name</td>
-                        <td>@item.Status</td>
+                        <td>@item.StatusDisplay</td>
                         <td>@item.BatchName</td>
                         <td>@item.DeveloperName</td>
+                        <td>@(item.HasRollback ? "Var" : "—")</td>
+                        <td>
+                            @if (item.HasCacheBustHints)
+                            {
+                                <span class="badge text-bg-warning text-dark" title="@item.CacheBustSummary">Uyarı</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
                         <td>@item.CreatedAt.ToString("dd.MM.yyyy")</td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-table" href="@Url.Action("Detail", "Scripts", new { id = item.ScriptId })">Detay</a>
+                            @if (AuthHelper.CanDeleteScript(User, item.DeveloperId))
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        onclick="deleteScriptFromList(@item.ScriptId, this)">Sil</button>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
@@ -38,6 +78,10 @@
 
 @section Scripts {
     <script>
+        window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            developerOptions = Url.Action("DeveloperOptions", "Scripts"),
+            deleteUrlPlaceholder = Url.Action("Delete", "Scripts", new { id = 999999999L })
+        }));
         setupTableFilter("scriptFilterInput", "#scriptTable tbody tr");
     </script>
 }

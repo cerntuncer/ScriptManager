@@ -23,11 +23,23 @@ namespace DAL.Configurations
                    .IsRequired()
                    .HasMaxLength(200);
 
+            builder.HasOne(x => x.Release)
+                   .WithMany(x => x.Batches)
+                   .HasForeignKey(x => x.ReleaseId)
+                   .OnDelete(DeleteBehavior.Restrict)
+                   .IsRequired(false);
+
+            builder.HasOne(x => x.Parent)
+                   .WithMany(x => x.ChildBatches)
+                   .HasForeignKey(x => x.ParentBatchId)
+                   .OnDelete(DeleteBehavior.Restrict)
+                   .IsRequired(false);
+
             builder.HasOne(x => x.Creator)
                    .WithMany(x => x.CreateBatches)
                    .HasForeignKey(x => x.CreatedBy)
                    .OnDelete(DeleteBehavior.Restrict)
-                   .IsRequired(false);
+                   .IsRequired();
         }
     }
 }

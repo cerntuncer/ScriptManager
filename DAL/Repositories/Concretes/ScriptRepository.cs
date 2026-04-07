@@ -21,9 +21,9 @@ namespace DAL.Repositories.Concretes
         public async Task<List<Script>> GetAllDetailedAsync()
         {
             return await _context.Scripts
+                .Where(x => !x.IsDeleted && x.Status != ScriptStatus.Deleted)
                 .Include(x => x.Batch)
                 .Include(x => x.Developer)
-                .Include(x => x.ReleaseScripts)
                 .Include(x => x.Commits)
                 .ToListAsync();
         }
@@ -33,7 +33,6 @@ namespace DAL.Repositories.Concretes
             return await _context.Scripts
                 .Include(x => x.Batch)
                 .Include(x => x.Developer)
-                .Include(x => x.ReleaseScripts)
                 .Include(x => x.Commits)
                 .FirstOrDefaultAsync(x => x.Id == id);
         }

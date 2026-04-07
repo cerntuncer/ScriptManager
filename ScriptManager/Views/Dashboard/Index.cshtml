@@ -1,37 +1,104 @@
-﻿@model ScriptManager.Models.Dashboard.DashboardViewModel
+@model ScriptManager.Models.Dashboard.DashboardViewModel
+
+@{
+    var total = Model.TotalScripts;
+    Func<int, int> pct = n => total > 0 ? (int)Math.Round(n * 100.0 / total) : 0;
+    var latestVer = Model.LatestReleases.FirstOrDefault()?.Version ?? "—";
+}
 
 <div class="page-head">
     <div>
         <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">Script, release ve conflict durumlarını buradan takip edebilirsin.</p>
-    </div>
-
-    <div class="page-actions">
-        <button class="btn btn-primary modern-btn" onclick="openCreateScriptModal()">
-            Create Script
-        </button>
+        <p class="page-subtitle">Kanal aktarımlarından gelen script’lerin release özetini buradan izleyebilirsin.</p>
     </div>
 </div>
 
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-label">Toplam Yayın</div>
-        <div class="stat-value">@Model.TotalReleases</div>
-        <div class="stat-meta">Latest @Model.LatestReleases.FirstOrDefault()?.Version</div>
+<section class="dashboard-overview">
+    <div class="panel-card overview-chart-panel">
+        <div class="panel-header">
+            <h3>Script durum dağılımı</h3>
+            <span class="panel-hint">@Model.TotalScripts toplam</span>
+        </div>
+        @if (total == 0)
+        {
+            <p class="text-muted mb-0">Henüz script yok; liste API’den dolduğunda grafik görünür.</p>
+        }
+        else
+        {
+            <div class="h-bar-chart" role="img" aria-label="Script durum yüzdeleri">
+                <div class="h-bar-row">
+                    <span class="h-bar-label">Ready</span>
+                    <div class="h-bar-track"><div class="h-bar-fill h-bar-ready" style="width: @(pct(Model.ReadyScripts))%"></div></div>
+                    <span class="h-bar-count">@Model.ReadyScripts <small>(@pct(Model.ReadyScripts)%)</small></span>
+                </div>
+                <div class="h-bar-row">
+                    <span class="h-bar-label">Testing</span>
+                    <div class="h-bar-track"><div class="h-bar-fill h-bar-testing" style="width: @(pct(Model.TestingScripts))%"></div></div>
+                    <span class="h-bar-count">@Model.TestingScripts <small>(@pct(Model.TestingScripts)%)</small></span>
+                </div>
+                <div class="h-bar-row">
+                    <span class="h-bar-label">Conflict</span>
+                    <div class="h-bar-track"><div class="h-bar-fill h-bar-conflict" style="width: @(pct(Model.OpenConflicts))%"></div></div>
+                    <span class="h-bar-count">@Model.OpenConflicts <small>(@pct(Model.OpenConflicts)%)</small></span>
+                </div>
+                <div class="h-bar-row">
+                    <span class="h-bar-label">Draft</span>
+                    <div class="h-bar-track"><div class="h-bar-fill h-bar-draft" style="width: @(pct(Model.DraftScripts))%"></div></div>
+                    <span class="h-bar-count">@Model.DraftScripts <small>(@pct(Model.DraftScripts)%)</small></span>
+                </div>
+                <div class="h-bar-row">
+                    <span class="h-bar-label">Diğer</span>
+                    <div class="h-bar-track"><div class="h-bar-fill h-bar-other" style="width: @(pct(Model.OtherScripts))%"></div></div>
+                    <span class="h-bar-count">@Model.OtherScripts <small>(@pct(Model.OtherScripts)%)</small></span>
+                </div>
+            </div>
+            <div class="mini-stacked-legend">
+                <span><i class="lg lg-ready"></i>Ready</span>
+                <span><i class="lg lg-testing"></i>Testing</span>
+                <span><i class="lg lg-conflict"></i>Conflict</span>
+                <span><i class="lg lg-draft"></i>Draft</span>
+                <span><i class="lg lg-other"></i>Diğer</span>
+            </div>
+        }
     </div>
 
-    <div class="stat-card">
-        <div class="stat-label">Toplam Script</div>
-        <div class="stat-value">@Model.TotalScripts</div>
-        <div class="stat-meta">@Model.ReadyScripts Ready • @Model.TestingScripts Testing</div>
+    <div class="panel-card overview-kpi-panel">
+        <div class="panel-header">
+            <h3>Özet metrikler</h3>
+        </div>
+        <div class="table-wrap">
+            <table class="kpi-table">
+                <tbody>
+                    <tr>
+                        <th scope="row">Toplam yayın</th>
+                        <td class="kpi-value">@Model.TotalReleases</td>
+                        <td class="kpi-meta">Son sürüm: @latestVer</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Toplam script</th>
+                        <td class="kpi-value">@Model.TotalScripts</td>
+                        <td class="kpi-meta">@Model.ReadyScripts Ready · @Model.TestingScripts Testing</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Açık conflict</th>
+                        <td class="kpi-value @(Model.OpenConflicts > 0 ? "text-warn" : "")">@Model.OpenConflicts</td>
+                        <td class="kpi-meta">Çözüm: Conflicts sayfası</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Önbellek ipucu</th>
+                        <td class="kpi-value @(Model.ScriptsWithCacheHints > 0 ? "text-warn" : "")">@Model.ScriptsWithCacheHints</td>
+                        <td class="kpi-meta">SQL’de SP_RECOMPILE / plan cache vb.</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Taslak (Draft)</th>
+                        <td class="kpi-value">@Model.DraftScripts</td>
+                        <td class="kpi-meta">Onay / test bekleyebilir</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-
-    <div class="stat-card warning">
-        <div class="stat-label">Açık Conflict</div>
-        <div class="stat-value">@Model.OpenConflicts</div>
-        <div class="stat-meta">High priority</div>
-    </div>
-</div>
+</section>
 
 <div class="content-grid">
     <section class="panel-card">
@@ -42,26 +109,12 @@
         <div class="alert-list">
             @foreach (var item in Model.Alerts)
             {
-                <div class="alert-row @item.Severity.ToString().ToLower()">
+                var sevClass = item.Severity >= 3 ? "high" : item.Severity == 2 ? "medium" : "low";
+                <div class="alert-row @sevClass">
                     <span class="alert-badge">[@item.Severity]</span>
                     <span>@item.Message</span>
                 </div>
             }
-        </div>
-    </section>
-
-    <section class="panel-card chart-panel">
-        <div class="panel-header">
-            <h3>Overview</h3>
-        </div>
-
-        <div class="dummy-chart">
-            <div class="bar" style="height:55%"></div>
-            <div class="bar" style="height:72%"></div>
-            <div class="bar" style="height:48%"></div>
-            <div class="bar" style="height:84%"></div>
-            <div class="bar" style="height:65%"></div>
-            <div class="bar" style="height:76%"></div>
         </div>
     </section>
 
@@ -75,8 +128,10 @@
                 <thead>
                     <tr>
                         <th>Version</th>
-                        <th>Date</th>
-                        <th>Action</th>
+                        <th>Script</th>
+                        <th>Rollback</th>
+                        <th>Tarih</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,34 +139,19 @@
                     {
                         <tr>
                             <td>@item.Version</td>
+                            <td>@item.ScriptCount</td>
+                            <td>@item.RollbackScriptCount</td>
                             <td>@item.CreatedAt.ToString("dd MMM yyyy")</td>
                             <td>
                                 <a class="btn btn-sm btn-table"
                                    href="@Url.Action("Detail", "Releases", new { id = item.ReleaseId })">
-                                    View
+                                    Aç
                                 </a>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
-        </div>
-    </section>
-
-    <section class="panel-card">
-        <div class="panel-header">
-            <h3>Recent Script Batches</h3>
-        </div>
-
-        <div class="batch-list">
-            @foreach (var item in Model.RecentBatches)
-            {
-                <div class="batch-row">
-                    <span class="batch-dot"></span>
-                    <span>@item.Name</span>
-                    <strong>@item.ScriptCount scripts</strong>
-                </div>
-            }
         </div>
     </section>
 </div>

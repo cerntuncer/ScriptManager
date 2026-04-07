@@ -1,9 +1,10 @@
-﻿namespace ScriptManager.Models.Batch
+namespace ScriptManager.Models.Batch
 {
     public class BatchListItemViewModel
     {
         public long BatchId { get; set; }
         public string Name { get; set; } = string.Empty;
+        public int ScriptCount { get; set; }
     }
     public class BatchDetailViewModel
     {

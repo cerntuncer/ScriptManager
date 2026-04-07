@@ -1,4 +1,4 @@
-﻿using BLL.Common;
+using BLL.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,5 +11,6 @@ namespace BLL.Features.Batchs.Queries
     {
         public long BatchId { get; set; }
         public string Name { get; set; }
+        public int ScriptCount { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using DAL.Entities;
+using BLL.Services;
+using DAL.Entities;
 using DAL.Enums;
 using DAL.Repositories.Interfaces;
 using MediatR;
@@ -13,19 +14,25 @@ namespace BLL.Features.Scripts.Commands
     {
         private readonly IRepository<Script> _scriptRepository;
         private readonly IRepository<Batch> _batchRepository;
+        private readonly IRepository<Release> _releaseRepository;
         private readonly IRepository<DAL.Entities.User> _userRepository;
         private readonly IMediator _mediator;
+        private readonly IScriptConflictSyncService _conflictSync;
 
         public CreateScriptHandle(
             IRepository<Script> scriptRepository,
             IRepository<Batch> batchRepository,
+            IRepository<Release> releaseRepository,
             IRepository<DAL.Entities.User> userRepository,
-            IMediator mediator)
+            IMediator mediator,
+            IScriptConflictSyncService conflictSync)
         {
             _scriptRepository = scriptRepository;
             _batchRepository = batchRepository;
+            _releaseRepository = releaseRepository;
             _userRepository = userRepository;
             _mediator = mediator;
+            _conflictSync = conflictSync;
         }
 
         public async Task<CreateScriptResponse> Handle(CreateScriptRequest request, CancellationToken cancellationToken)
@@ -42,7 +49,7 @@ namespace BLL.Features.Scripts.Commands
                 return new CreateScriptResponse { Success = false, Message = "Bu isimde script zaten mevcut." };
 
 
-            Batch batch = null;
+            Batch? batch = null;
             if (request.BatchId.HasValue)
             {
                 batch = await _batchRepository.GetByIdAsync(request.BatchId.Value);
@@ -68,10 +75,6 @@ namespace BLL.Features.Scripts.Commands
                         return new CreateScriptResponse { Success = false, Message = "Batch oluşturuldu ama bulunamadı." };
                 }
             }
-            else
-            {
-                return new CreateScriptResponse { Success = false, Message = "Batch bilgisi sağlanmadı." };
-            }
 
             var user = await _userRepository.GetByIdAsync(request.DeveloperId);
             if (user == null)
@@ -83,7 +86,7 @@ namespace BLL.Features.Scripts.Commands
                 Name = request.Name,
                 SqlScript = request.SqlScript,
                 RollbackScript = request.RollbackScript,
-                BatchId = batch.Id,
+                BatchId = batch?.Id,
                 DeveloperId = user.Id,
                 Status = ScriptStatus.Draft,
                 CreatedAt = DateTime.UtcNow
@@ -92,12 +95,14 @@ namespace BLL.Features.Scripts.Commands
             await _scriptRepository.AddAsync(script);
             await _scriptRepository.SaveAsync();
 
+            await _conflictSync.SyncAfterScriptSavedAsync(script.Id, cancellationToken);
+
             return new CreateScriptResponse
             {
                 Success = true,
                 Message = "Script başarıyla oluşturuldu.",
-                ScriptId = (int)script.Id,
-                BatchId = (int)batch.Id
+                ScriptId = script.Id,
+                BatchId = batch?.Id
             };
         }
     }

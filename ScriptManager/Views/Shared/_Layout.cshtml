@@ -1,4 +1,9 @@
-﻿<!DOCTYPE html>
+@inject IHttpContextAccessor HttpContextAccessor
+@{
+    var uidStr = HttpContextAccessor.HttpContext?.User
+        .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+}
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="utf-8" />
@@ -11,7 +16,8 @@
 
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 </head>
-<body>
+<body data-script-create-url="@Url.Action("Create", "Scripts")"
+      data-current-user-id="@uidStr">
     <div class="app-shell">
         <aside id="sidebar" class="app-sidebar">
             @await Html.PartialAsync("_Sidebar")

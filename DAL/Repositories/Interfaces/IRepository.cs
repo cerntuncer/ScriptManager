@@ -1,10 +1,7 @@
 ﻿using DAL.Common;
-using DAL.Entities;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace DAL.Repositories.Interfaces
@@ -17,12 +14,13 @@ namespace DAL.Repositories.Interfaces
         Task<T?> GetFirstAsync(Expression<Func<T, bool>> predicate);
 
         Task AddAsync(T entity);
-        Task AddRangeAsync(List<T> entities);
+        Task AddRangeAsync(IEnumerable<T> entities);
 
         void Update(T entity);
 
         Task SoftDeleteAsync(long id);
-        Task HardDeleteAsync(long id);//Entity alarak düzenle !!!!!!!!!!!!!!!!!!!!!
+        Task HardDeleteAsync(T entity);
+        Task HardDeleteByIdAsync(long id);
 
         Task<int> SaveAsync();
 

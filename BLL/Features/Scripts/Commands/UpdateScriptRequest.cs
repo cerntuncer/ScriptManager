@@ -1,4 +1,4 @@
-﻿using BLL.Common;
+using BLL.Common;
 using BLL.Features.Batchs.Commands;
 using MediatR;
 using System;
@@ -17,10 +17,10 @@ namespace BLL.Features.Scripts.Commands
         public string SqlScript { get; set; }
         public string? RollbackScript { get; set; }
 
-        public int? BatchId { get; set; }
+        public long? BatchId { get; set; }
         public CreateBatchRequest? Batch { get; set; }
 
-        public int UserId { get; set; } // commit için
+        public long UserId { get; set; } // commit için
         public string? Message { get; set; } // commit mesajı
 
         public int Status { get; set; } // enum int olarak

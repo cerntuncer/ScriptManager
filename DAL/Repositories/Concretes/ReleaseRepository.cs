@@ -1,4 +1,4 @@
-﻿using DAL.Context;
+using DAL.Context;
 using DAL.Entities;
 using DAL.Repositories.Base;
 using DAL.Repositories.Interfaces;
@@ -17,23 +17,23 @@ namespace DAL.Repositories.Concretes
         public async Task<List<Release>> GetAllWithDetailsAsync()
         {
             return await _context.Releases
-                .Include(x => x.ReleaseScripts)
-                .ThenInclude(x => x.Script)
+                .Include(x => x.Batches)
+                .ThenInclude(x => x.Scripts)
                 .ToListAsync();
         }
 
         public async Task<Release?> GetWithScriptsAsync(long id)
         {
             return await _context.Releases
-                .Include(x => x.ReleaseScripts)
-                .ThenInclude(x => x.Script)
-                .FirstOrDefaultAsync(x => x.Id == id);
+                .Include(x => x.Batches)
+                .ThenInclude(x => x.Scripts)
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
         }
 
         public async Task<Release?> GetByVersionAsync(string version)
         {
             return await _context.Releases
-                .FirstOrDefaultAsync(x => x.Version == version);
+                .FirstOrDefaultAsync(x => x.Version == version && !x.IsDeleted);
         }
 
 

@@ -1,18 +1,23 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ScriptManager.ViewComponents
 {
-    public class UserMenuViewComponent : ViewComponent
+    public class UserMenuViewComponent(IHttpContextAccessor http) : ViewComponent
     {
         public IViewComponentResult Invoke()
         {
-            var model = new UserMenuViewModel
+            var u = http.HttpContext?.User;
+            if (u?.Identity?.IsAuthenticated != true)
             {
-                FullName = "Demo User",
-                Role = "Admin"
-            };
+                return View(new UserMenuViewModel { FullName = "Geliştirme", Role = "Giriş kapalı" });
+            }
 
-            return View(model);
+            var name = u.FindFirstValue(ClaimTypes.Name)
+                       ?? u.Identity?.Name
+                       ?? "Kullanıcı";
+            var role = u.FindFirstValue(ClaimTypes.Role) ?? "";
+            return View(new UserMenuViewModel { FullName = name, Role = role });
         }
     }
 

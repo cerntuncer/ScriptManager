@@ -1,5 +1,4 @@
 ﻿using DAL.Common;
-using DAL.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,8 +12,6 @@ namespace DAL.Entities
         public long ScriptId { get; set; }//ilk script
         public long ConflictingScriptId { get; set; }//çakışan ikinci script
         public string TableName { get; set; } = null!;
-        public ConflictSeverity Severity { get; set; }
-        public ConflictStatus Status { get; set; }
         public DateTime DetectedAt { get; set; }//conflict tespit zamanı
         public long? ResolvedBy { get; set; }
         public DateTime? ResolvedAt { get; set; }

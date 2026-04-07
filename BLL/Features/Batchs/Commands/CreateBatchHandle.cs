@@ -13,7 +13,9 @@ namespace BLL.Features.Batchs.Commands
         private readonly IRepository<Batch> _batchRepository;
         private readonly IRepository<DAL.Entities.User> _userRepository;
 
-        public CreateBatchHandle(IRepository<Batch> batchRepository, IRepository<DAL.Entities.User> userRepository)
+        public CreateBatchHandle(
+            IRepository<Batch> batchRepository,
+            IRepository<DAL.Entities.User> userRepository)
         {
             _batchRepository = batchRepository;
             _userRepository = userRepository;
@@ -30,8 +32,7 @@ namespace BLL.Features.Batchs.Commands
                 };
             }
 
-
-            var existing = await _batchRepository.GetWhereAsync(x => x.Name == request.Name);
+            var existing = await _batchRepository.GetWhereAsync(x => x.Name == request.Name && !x.IsDeleted);
             if (existing.Any())
             {
                 return new CreateBatchResponse
@@ -54,6 +55,7 @@ namespace BLL.Features.Batchs.Commands
             var batch = new Batch
             {
                 Name = request.Name,
+                ReleaseId = null,
                 CreatedBy = request.CreatedBy,
                 CreatedAt = DateTime.UtcNow
             };

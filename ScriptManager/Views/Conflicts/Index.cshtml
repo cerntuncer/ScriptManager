@@ -1,0 +1,93 @@
+@model ScriptManager.Models.Conflict.ConflictsIndexViewModel
+@{
+    var canResolve = ViewBag.CanResolveConflicts as bool? == true;
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Çakışmalar</h1>
+        <p class="page-sub text-muted mb-0 small">Aynı tabloya müdahale eden script çiftleri. <strong>İncele</strong> ile her iki scriptin SQL ve rollback metnini düzenleyebilir; <strong>Kaydet ve çakışmayı kapat</strong> ile inceleme onayını verirsiniz. Sadece kendi scriptinizi düzenleyebilirsiniz; yönetici her iki tarafı da düzenler.</p>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-header">
+        <h3 class="mb-0">Açık çakışmalar (@Model.Rows.Count)</h3>
+    </div>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="text-muted mb-0 p-3">Açık çakışma yok.</p>
+    }
+    else
+    {
+        <div class="table-wrap custom-scroll">
+            <table class="modern-table">
+                <thead>
+                <tr>
+                    <th>Tablo</th>
+                    <th>Script 1</th>
+                    <th>Script 2</th>
+                    <th>Tespit</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var r in Model.Rows)
+                {
+                    <tr>
+                        <td><span class="badge text-bg-warning text-dark">@r.TableName</span></td>
+                        <td>
+                            <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })">@r.ScriptName</a>
+                            <div class="small text-muted">@r.ScriptDeveloper</div>
+                        </td>
+                        <td>
+                            <a href="@Url.Action("Detail", "Scripts", new { id = r.OtherScriptId })">@r.OtherScriptName</a>
+                            <div class="small text-muted">@r.OtherDeveloper</div>
+                        </td>
+                        <td class="small">@r.DetectedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td class="text-nowrap">
+                            @if (canResolve)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openConflictReviewModal(@r.ConflictId)">İncele</button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="resolveConflict(@r.ConflictId)">Çözümlendi</button>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Salt okunur</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        window.__conflictsUrls = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
+            pair = Url.Action("Pair", "Conflicts") + "?id=",
+            saveReview = Url.Action("SaveReview", "Conflicts")
+        }));
+    </script>
+    <script>
+        async function resolveConflict(conflictId) {
+            const res = await fetch("@Url.Action("Resolve", "Conflicts")", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ conflictId })
+            });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (_) {}
+            if (!res.ok || !data || data.success === false) {
+                showToast(data?.message || "İşlem başarısız.", "error");
+                return;
+            }
+            showToast(data?.message || "Tamam.", "success");
+            window.location.reload();
+        }
+    </script>
+}

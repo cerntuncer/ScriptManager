@@ -17,7 +17,7 @@ namespace API.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(CreateReleaseRequest request)
+        public async Task<IActionResult> Create(CreateReleaseApiRequest request)
         {
             var result = await _mediator.Send(request);
 
@@ -39,7 +39,7 @@ namespace API.Controllers
         }
 
         [HttpDelete]
-        public async Task<IActionResult> Delete(DeleteReleaseRequest request)
+        public async Task<IActionResult> Delete(DeleteReleaseApiRequest request)
         {
             var result = await _mediator.Send(request);
 
@@ -52,14 +52,14 @@ namespace API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var result = await _mediator.Send(new GetReleaseListRequest());
+            var result = await _mediator.Send(new GetReleasesRequest());
             return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> Detail(long id)
         {
-            var result = await _mediator.Send(new GetReleaseDetailRequest
+            var result = await _mediator.Send(new GetReleaseByIdRequest
             {
                 ReleaseId = id
             });

@@ -8,11 +8,10 @@ namespace DAL.Enums
 {
     public enum ScriptStatus
     {
-        Draft = 1,//script yeni oluşturulmuş ama test edilmemiş
+        Draft = 1,
         Testing = 2,
-        Ready = 3,//script tamamen hazır conflict yok release e eklenebilir
-        Conflict = 4,//script başka scriptle çakışmaktadır
+        Ready = 3,
+        Conflict = 4,
         Deleted = 5
-
     }
 }

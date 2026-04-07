@@ -1,7 +1,6 @@
-﻿using DAL.Configurations;
+using DAL.Configurations;
 using DAL.Entities;
 using Microsoft.EntityFrameworkCore;
-using static Azure.Core.HttpHeader;
 
 namespace DAL.Context
 {
@@ -12,7 +11,6 @@ namespace DAL.Context
         public DbSet<User> Users { get; set; }
         public DbSet<UserCredential> UserCredentials { get; set; }
         public DbSet<Script> Scripts { get; set; }
-        public DbSet<ReleaseScript> ReleaseScripts { get; set; }
         public DbSet<Release> Releases { get; set; }
         public DbSet<Conflict> Conflicts { get; set; }
         public DbSet<Commit> Commits { get; set; }
@@ -25,7 +23,6 @@ namespace DAL.Context
             modelBuilder.ApplyConfiguration(new UserMap());
             modelBuilder.ApplyConfiguration(new UserCredentialMap());
             modelBuilder.ApplyConfiguration(new ScriptMap());
-            modelBuilder.ApplyConfiguration(new ReleaseScriptMap());
             modelBuilder.ApplyConfiguration(new ReleaseMap());
             modelBuilder.ApplyConfiguration(new ConflictMap());
             modelBuilder.ApplyConfiguration(new CommitMap());

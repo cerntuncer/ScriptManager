@@ -1,4 +1,5 @@
-﻿using DAL.Entities;
+﻿using BLL.Services;
+using DAL.Entities;
 using DAL.Enums;
 using DAL.Repositories.Interfaces;
 using MediatR;
@@ -13,13 +14,16 @@ namespace BLL.Features.Scripts.Commands
     {
         private readonly IRepository<Script> _scriptRepository;
         private readonly IRepository<Batch> _batchRepository;
+        private readonly IScriptConflictSyncService _conflictSync;
 
         public MoveScriptToBatchHandle(
             IRepository<Script> scriptRepository,
-            IRepository<Batch> batchRepository)
+            IRepository<Batch> batchRepository,
+            IScriptConflictSyncService conflictSync)
         {
             _scriptRepository = scriptRepository;
             _batchRepository = batchRepository;
+            _conflictSync = conflictSync;
         }
 
         public async Task<MoveScriptToBatchResponse> Handle(
@@ -71,6 +75,8 @@ namespace BLL.Features.Scripts.Commands
             _scriptRepository.Update(script);
 
             await _scriptRepository.SaveAsync();
+
+            await _conflictSync.SyncAfterScriptSavedAsync(script.Id, cancellationToken);
 
             return new MoveScriptToBatchResponse
             {

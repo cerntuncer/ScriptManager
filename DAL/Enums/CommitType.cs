@@ -11,6 +11,9 @@ namespace DAL.Enums
         Create = 1,
         Update = 2,
         Delete = 3,
-        ResolveConflict = 4
+        ResolveConflict = 4,
+
+        /// <summary>Draft → Testing / Ready veya Testing → Ready durum geçişi.</summary>
+        StatusChange = 5
     }
 }

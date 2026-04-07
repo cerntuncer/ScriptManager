@@ -1,4 +1,5 @@
-﻿using BLL.Features.Scripts.Commands;
+using BLL.Features.Scripts.Commands;
+using BLL.Services;
 using DAL.Context;
 using DAL.Repositories.Base;
 using DAL.Repositories.Concretes;
@@ -35,6 +36,8 @@ builder.Services.AddScoped<IReleaseRepository, ReleaseRepository>();
 builder.Services.AddScoped<IScriptRepository, ScriptRepository>();
 builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
+builder.Services.AddScoped<IScriptWorkflowService, ScriptWorkflowService>();
 
 // 🔥 JWT
 builder.Services.AddAuthentication("Bearer")
@@ -57,7 +60,24 @@ builder.Services.AddAuthentication("Bearer")
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:5270", "https://localhost:5270")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<MyContext>();
+    db.Database.Migrate();
+}
 
 // 🔥 Middleware sırası
 app.UseSwagger();
@@ -69,9 +89,13 @@ app.UseSwaggerUI(c =>
 
 app.UseRouting();
 
+app.UseCors();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();

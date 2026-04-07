@@ -1,4 +1,10 @@
-﻿<div class="sidebar-brand">
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var user = ViewContext.HttpContext.User;
+    var isAdmin = user.IsInRole("Admin");
+}
+
+<div class="sidebar-brand">
     <div class="brand-logo">SM</div>
     <div class="brand-text">
         <strong>ScriptManager</strong>
@@ -7,36 +13,35 @@
 </div>
 
 <nav class="sidebar-nav custom-scroll">
-    <a class="nav-link-item @(ViewData["Title"]?.ToString() == "Dashboard" ? "active" : "")"
+    <a class="nav-link-item @(currentController == "Dashboard" ? "active" : "")"
        href="@Url.Action("Index", "Dashboard")">
         <span>Dashboard</span>
     </a>
 
-    <div class="nav-group">
-        <button class="nav-collapse-btn" type="button" data-collapse-target="versionMenu">
-            <span>Versions</span>
-            <span class="collapse-arrow">⌄</span>
-        </button>
+    <a class="nav-link-item @(currentController == "Releases" ? "active" : "")"
+       href="@Url.Action("Index", "Releases")">
+        <span>Releases</span>
+    </a>
 
-        <div id="versionMenu" class="nav-collapse-menu open">
-            <a class="nav-sub-link" href="@Url.Action("Index", "Releases")">Releases</a>
-        </div>
-    </div>
-
-    <a class="nav-link-item @(ViewData["Title"]?.ToString() == "Scripts" ? "active" : "")"
+    <a class="nav-link-item @(currentController == "Scripts" ? "active" : "")"
        href="@Url.Action("Index", "Scripts")">
         <span>Scripts</span>
     </a>
 
-    <a class="nav-link-item" href="#">
+    <a class="nav-link-item @(currentController == "Conflicts" ? "active" : "")"
+       href="@Url.Action("Index", "Conflicts")">
         <span>Conflicts</span>
     </a>
 
-    <a class="nav-link-item" href="#">
-        <span>Users</span>
-    </a>
+    @if (isAdmin)
+    {
+        <a class="nav-link-item @(currentController == "Users" ? "active" : "")"
+           href="@Url.Action("Index", "Users")">
+            <span>Users</span>
+        </a>
+    }
 </nav>
 
 <div class="sidebar-footer">
-    <button class="btn btn-logout w-100">Logout</button>
+    @* Giriş sonraya bırakıldı; oturum kapatma yok. *@
 </div>

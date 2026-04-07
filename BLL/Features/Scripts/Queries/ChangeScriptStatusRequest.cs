@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +12,7 @@ namespace BLL.Features.Scripts.Queries
         public long ScriptId { get; set; }
 
         public int NewStatus { get; set; } // enum int
-        public int UserId { get; set; }
+        public long UserId { get; set; }
 
         public string? Message { get; set; }
     }

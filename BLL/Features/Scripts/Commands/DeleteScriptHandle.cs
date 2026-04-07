@@ -14,13 +14,16 @@ namespace BLL.Features.Scripts.Commands
     {
         private readonly IRepository<Script> _scriptRepository;
         private readonly IRepository<Commit> _commitRepository;
+        private readonly IRepository<DAL.Entities.User> _userRepository;
 
         public DeleteScriptHandle(
             IRepository<Script> scriptRepository,
-            IRepository<Commit> commitRepository)
+            IRepository<Commit> commitRepository,
+            IRepository<DAL.Entities.User> userRepository)
         {
             _scriptRepository = scriptRepository;
             _commitRepository = commitRepository;
+            _userRepository = userRepository;
         }
 
         public async Task<DeleteScriptResponse> Handle(DeleteScriptRequest request, CancellationToken cancellationToken)
@@ -44,6 +47,22 @@ namespace BLL.Features.Scripts.Commands
                     Success = false,
                     Message = "Script zaten silinmiş."
                 };
+            }
+
+            var actor = await _userRepository.GetByIdAsync(request.UserId);
+            if (actor == null || actor.IsDeleted || !actor.IsActive)
+            {
+                return new DeleteScriptResponse { Success = false, Message = "Kullanıcı geçersiz." };
+            }
+
+            if (actor.Role == UserRole.Tester)
+            {
+                return new DeleteScriptResponse { Success = false, Message = "Testçi rolü script silemez." };
+            }
+
+            if (actor.Role == UserRole.Developer && script.DeveloperId != actor.Id)
+            {
+                return new DeleteScriptResponse { Success = false, Message = "Yalnızca kendi scriptinizi silebilirsiniz." };
             }
 
             script.Status = ScriptStatus.Deleted;

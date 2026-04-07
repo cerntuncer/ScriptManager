@@ -1,4 +1,4 @@
-﻿using DAL.Common;
+using DAL.Common;
 using DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -19,16 +19,21 @@ namespace DAL.Configurations
             builder.Property(x => x.Name).IsRequired()
                 .HasMaxLength(200);
             builder.Property(x => x.SqlScript).IsRequired();
-            builder.Property(X => X.RollbackScript).HasMaxLength(500);
+            builder.Property(x => x.RollbackScript);
+            builder.Property(x => x.BatchId).IsRequired(false);
             builder.HasOne(x => x.Batch)
                 .WithMany(x => x.Scripts)
                 .HasForeignKey(x => x.BatchId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
             builder.HasOne(x => x.Developer)
                .WithMany(x => x.Scripts)
                .HasForeignKey(x => x.DeveloperId)
                .OnDelete(DeleteBehavior.Restrict);
             builder.Property(x => x.Status).IsRequired();
+            builder.Property(x => x.StatusBeforeConflict)
+                .HasConversion<int>()
+                .IsRequired(false);
             builder.HasIndex(x => x.Name);
         }
     }

@@ -1,4 +1,4 @@
-﻿using ScriptManager.Models.Release;
+using ScriptManager.Models.Release;
 
 namespace ScriptManager.Models.Dashboard
 {
@@ -7,17 +7,14 @@ namespace ScriptManager.Models.Dashboard
         public int TotalReleases { get; set; }
         public int TotalScripts { get; set; }
         public int OpenConflicts { get; set; }
+        public int ScriptsWithCacheHints { get; set; }
         public int ReadyScripts { get; set; }
         public int TestingScripts { get; set; }
+        public int DraftScripts { get; set; }
+        public int OtherScripts { get; set; }
         public List<ReleaseListItemViewModel> LatestReleases { get; set; } = new();
-        public List<BatchSummaryViewModel> RecentBatches { get; set; } = new();
         public List<AlertItemViewModel> Alerts { get; set; } = new();
 
-    }
-    public class BatchSummaryViewModel
-    {
-        public string Name { get; set; }
-        public int ScriptCount { get; set; }
     }
     public class AlertItemViewModel
     {

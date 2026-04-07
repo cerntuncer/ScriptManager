@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,5 +14,9 @@ namespace BLL.Features.Users.Queries
         public string BatchName { get; set; }
         public string DeveloperName { get; set; }
         public DateTime CreatedAt { get; set; }
+        public bool HasRollback { get; set; }
+
+        public bool HasOpenConflict { get; set; }
+        public List<string> ConflictingTableNames { get; set; } = new();
     }
 }

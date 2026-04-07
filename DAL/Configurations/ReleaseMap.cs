@@ -36,7 +36,11 @@ namespace DAL.Configurations
                 .HasForeignKey(x => x.CreatedBy)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.Property(x => x.Status).IsRequired();
+            builder.HasOne(x => x.RootBatch)
+                .WithMany()
+                .HasForeignKey(x => x.RootBatchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
         }
     }
 }

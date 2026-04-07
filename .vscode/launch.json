@@ -1,0 +1,50 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (5281)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-api",
+      "program": "${workspaceFolder}/API/bin/Debug/net9.0/API.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/API",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Now listening on: (https?://\\S+)",
+        "uriFormat": "%s/swagger",
+        "killOnServerStop": true
+      }
+    },
+    {
+      "name": "ScriptManager MVC (5270)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-mvc",
+      "program": "${workspaceFolder}/ScriptManager/bin/Debug/net9.0/ScriptManager.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/ScriptManager",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Now listening on: (https?://\\S+)",
+        "uriFormat": "%s",
+        "killOnServerStop": true
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + MVC (birlikte)",
+      "configurations": ["API (5281)", "ScriptManager MVC (5270)"],
+      "stopAll": true,
+      "presentation": {
+        "group": "ScriptManager",
+        "order": 1
+      }
+    }
+  ]
+}

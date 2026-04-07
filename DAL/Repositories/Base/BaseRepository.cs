@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace DAL.Repositories.Base
@@ -50,7 +49,7 @@ namespace DAL.Repositories.Base
             await _table.AddAsync(entity);
         }
 
-        public async Task AddRangeAsync(List<T> entities)
+        public async Task AddRangeAsync(IEnumerable<T> entities)
         {
             foreach (var entity in entities)
             {
@@ -78,7 +77,26 @@ namespace DAL.Repositories.Base
             _table.Update(entity);
         }
 
-        public async Task HardDeleteAsync(long id)
+        public async Task HardDeleteAsync(T entity)
+        {
+            if (entity == null) return;
+
+            // If this instance comes from a filtered query and is soft-deleted,
+            // ensure it can still be deleted physically.
+            var tracked = _context.Entry(entity);
+            if (tracked.State == EntityState.Detached)
+            {
+                var existing = await _table.IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(x => x.Id == entity.Id);
+                if (existing == null) return;
+                _table.Remove(existing);
+                return;
+            }
+
+            _table.Remove(entity);
+        }
+
+        public async Task HardDeleteByIdAsync(long id)
         {
             var entity = await _table.IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.Id == id);

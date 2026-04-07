@@ -44,12 +44,22 @@ namespace DAL.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<long?>("ParentBatchId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ReleaseId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ParentBatchId");
+
+                    b.HasIndex("ReleaseId");
 
                     b.ToTable("Batches", (string)null);
                 });
@@ -122,12 +132,6 @@ namespace DAL.Migrations
                     b.Property<long>("ScriptId")
                         .HasColumnType("bigint");
 
-                    b.Property<int>("Severity")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
                     b.Property<string>("TableName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -174,8 +178,8 @@ namespace DAL.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<long?>("RootBatchId")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -189,45 +193,12 @@ namespace DAL.Migrations
 
                     b.HasIndex("CreatedBy");
 
+                    b.HasIndex("RootBatchId");
+
                     b.HasIndex("Version")
                         .IsUnique();
 
                     b.ToTable("Releases", (string)null);
-                });
-
-            modelBuilder.Entity("DAL.Entities.ReleaseScript", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ExecutionOrder")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<long>("ReleaseId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("ScriptId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReleaseId");
-
-                    b.HasIndex("ScriptId");
-
-                    b.ToTable("ReleaseScripts", (string)null);
                 });
 
             modelBuilder.Entity("DAL.Entities.Script", b =>
@@ -238,7 +209,7 @@ namespace DAL.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<long>("BatchId")
+                    b.Property<long?>("BatchId")
                         .HasColumnType("bigint");
 
                     b.Property<DateTime>("CreatedAt")
@@ -259,14 +230,16 @@ namespace DAL.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("RollbackScript")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SqlScript")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("StatusBeforeConflict")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -385,9 +358,24 @@ namespace DAL.Migrations
                     b.HasOne("DAL.Entities.User", "Creator")
                         .WithMany("CreateBatches")
                         .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DAL.Entities.Batch", "Parent")
+                        .WithMany("ChildBatches")
+                        .HasForeignKey("ParentBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DAL.Entities.Release", "Release")
+                        .WithMany("Batches")
+                        .HasForeignKey("ReleaseId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Creator");
+
+                    b.Navigation("Parent");
+
+                    b.Navigation("Release");
                 });
 
             modelBuilder.Entity("DAL.Entities.Commit", b =>
@@ -412,7 +400,7 @@ namespace DAL.Migrations
             modelBuilder.Entity("DAL.Entities.Conflict", b =>
                 {
                     b.HasOne("DAL.Entities.Script", "ConflictingScript")
-                        .WithMany("SecondaryConflicts")
+                        .WithMany()
                         .HasForeignKey("ConflictingScriptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -423,7 +411,7 @@ namespace DAL.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("DAL.Entities.Script", "Script")
-                        .WithMany("PrimaryConflicts")
+                        .WithMany()
                         .HasForeignKey("ScriptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -443,26 +431,14 @@ namespace DAL.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("DAL.Entities.Batch", "RootBatch")
+                        .WithMany()
+                        .HasForeignKey("RootBatchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Creator");
-                });
 
-            modelBuilder.Entity("DAL.Entities.ReleaseScript", b =>
-                {
-                    b.HasOne("DAL.Entities.Release", "Release")
-                        .WithMany("ReleaseScripts")
-                        .HasForeignKey("ReleaseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Entities.Script", "Script")
-                        .WithMany("ReleaseScripts")
-                        .HasForeignKey("ScriptId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Release");
-
-                    b.Navigation("Script");
+                    b.Navigation("RootBatch");
                 });
 
             modelBuilder.Entity("DAL.Entities.Script", b =>
@@ -470,8 +446,7 @@ namespace DAL.Migrations
                     b.HasOne("DAL.Entities.Batch", "Batch")
                         .WithMany("Scripts")
                         .HasForeignKey("BatchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("DAL.Entities.User", "Developer")
                         .WithMany("Scripts")
@@ -497,23 +472,19 @@ namespace DAL.Migrations
 
             modelBuilder.Entity("DAL.Entities.Batch", b =>
                 {
+                    b.Navigation("ChildBatches");
+
                     b.Navigation("Scripts");
                 });
 
             modelBuilder.Entity("DAL.Entities.Release", b =>
                 {
-                    b.Navigation("ReleaseScripts");
+                    b.Navigation("Batches");
                 });
 
             modelBuilder.Entity("DAL.Entities.Script", b =>
                 {
                     b.Navigation("Commits");
-
-                    b.Navigation("PrimaryConflicts");
-
-                    b.Navigation("ReleaseScripts");
-
-                    b.Navigation("SecondaryConflicts");
                 });
 
             modelBuilder.Entity("DAL.Entities.User", b =>

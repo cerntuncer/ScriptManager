@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +9,7 @@ namespace DAL.Enums
     public enum UserRole
     {
         Developer = 1,
-        DBA = 2,
-        Admin = 3
+        Admin = 2,
+        Tester = 3
     }
 }

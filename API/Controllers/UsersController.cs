@@ -1,4 +1,4 @@
-﻿using BLL.Features.User.Commands;
+using BLL.Features.User.Commands;
 using BLL.Features.Users.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +25,15 @@ namespace API.Controllers
         }
 
 
-        [HttpGet("{id}")]
+        [HttpGet("list")]
+        public async Task<IActionResult> GetList()
+        {
+            var rows = await _mediator.Send(new GetUserListRequest());
+            return Ok(rows);
+        }
+
+        /// <summary>"list" segmentinin {id} olarak yanlış eşleşmesini engeller.</summary>
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetUserById(int id)
         {
             var request = new GetUserByIdRequest { Id = id };
@@ -42,7 +50,7 @@ namespace API.Controllers
         }
 
 
-        [HttpGet("with-details/{id}")]
+        [HttpGet("with-details/{id:int}")]
         public async Task<IActionResult> GetUserWithDetails(int id)
         {
             var request = new GetUserWithDetailsRequest { Id = id };

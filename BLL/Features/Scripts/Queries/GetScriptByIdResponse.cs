@@ -22,5 +22,19 @@ namespace BLL.Features.Scripts.Queries
 
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
+
+        /// <summary>Özet uyarı; açık çakışma yoksa null.</summary>
+        public string? ConflictSummaryWarning { get; set; }
+
+        public List<ScriptOpenConflictDto> OpenConflicts { get; set; } = new();
+    }
+
+    public class ScriptOpenConflictDto
+    {
+        public long ConflictId { get; set; }
+        public string TableName { get; set; } = null!;
+        public long OtherScriptId { get; set; }
+        public string OtherScriptName { get; set; } = null!;
+        public string WarningMessage { get; set; } = null!;
     }
 }

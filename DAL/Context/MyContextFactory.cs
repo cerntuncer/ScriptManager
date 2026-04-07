@@ -1,24 +1,15 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.Extensions.Configuration;
-using System.IO;
 
-namespace DAL.Context
+namespace DAL.Context;
+
+/// <summary>Design-time migrations; çalışma anında connection string kullanılmaz.</summary>
+public class MyContextFactory : IDesignTimeDbContextFactory<MyContext>
 {
-    public class MyContextFactory : IDesignTimeDbContextFactory<MyContext>
+    public MyContext CreateDbContext(string[] args)
     {
-        public MyContext CreateDbContext(string[] args)
-        {
-            // DAL klasöründe appsettings.json arar
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .Build();
-
-            var optionsBuilder = new DbContextOptionsBuilder<MyContext>();
-            optionsBuilder.UseSqlServer(configuration.GetConnectionString("DefaultConnection"));
-
-            return new MyContext(optionsBuilder.Options);
-        }
+        var optionsBuilder = new DbContextOptionsBuilder<MyContext>();
+        optionsBuilder.UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=ScriptManagerDesign;Trusted_Connection=True;TrustServerCertificate=True");
+        return new MyContext(optionsBuilder.Options);
     }
 }

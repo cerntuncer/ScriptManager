@@ -1,6 +1,5 @@
 ﻿using DAL.Context;
 using DAL.Entities;
-using DAL.Enums;
 using DAL.Repositories.Base;
 using DAL.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +29,7 @@ namespace DAL.Repositories.Concretes
         public async Task<List<Conflict>> GetUnresolvedConflictsAsync()
         {
             return await _context.Conflicts
-                .Where(x => x.Status != ConflictStatus.Resolved)
+                .Where(x => x.ResolvedAt == null)
                 .Include(x => x.Script)
                 .Include(x => x.ConflictingScript)
                 .ToListAsync();

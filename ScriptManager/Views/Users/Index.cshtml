@@ -1,0 +1,119 @@
+@model ScriptManager.Models.User.UsersIndexViewModel
+@{
+    var actorId = ViewBag.ActorUserId as long? ?? 0L;
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Kullanıcılar</h1>
+        <p class="page-sub text-muted mb-0 small">
+            Roller iş akışını belirler: <strong>Geliştirici</strong> taslak ve Hazır/test gönderimi;
+            <strong>Testçi</strong> yalnızca &quot;İncelemede&quot; scripti <strong>Hazır</strong> yapar;
+            <strong>Yönetici</strong> kullanıcıları ve pasif/aktif durumunu yönetir. Release’e yalnızca <strong>Hazır</strong> scriptler seçilebilir.
+        </p>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <h3 class="mb-0">Kullanıcı listesi</h3>
+        <span class="text-muted small">@Model.Users.Count kayıt (veritabanı, silinmemiş)</span>
+    </div>
+
+    @if (Model.Users.Count == 0)
+    {
+        <div class="p-4">
+            <p class="text-muted mb-0">Bu veritabanında görüntülenecek kullanıcı yok (<code>Users</code> tablosu / <code>IsDeleted = 0</code>).</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-toolbar">
+            <input id="userFilterInput" class="table-filter-input" type="search" placeholder="Ad veya e-posta ara…" autocomplete="off" />
+        </div>
+
+        <div class="table-wrap custom-scroll">
+            <table class="modern-table" id="userTable">
+                <thead>
+                    <tr>
+                        <th>Ad</th>
+                        <th>E-posta</th>
+                        <th>Rol</th>
+                        <th>Hesap durumu</th>
+                        <th>İş akışı (özet)</th>
+                        <th>Oluşturulma</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var u in Model.Users)
+                    {
+                        <tr data-user-id="@u.UserId">
+                            <td>@u.Name</td>
+                            <td>@u.Email</td>
+                            <td>@u.Role</td>
+                            <td>
+                                @if (u.IsActive)
+                                {
+                                    <span class="badge text-bg-success">Aktif</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-secondary">Pasif</span>
+                                }
+                            </td>
+                            <td class="small text-muted" style="max-width:22rem;">@u.WorkflowHint</td>
+                            <td>@u.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                            <td>
+                                @if (u.UserId != actorId)
+                                {
+                                    if (u.IsActive)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="setUserActive(@u.UserId, false)">Pasifleştir</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-success" onclick="setUserActive(@u.UserId, true)">Aktifleştir</button>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Siz</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    @if (Model.Users.Count > 0)
+    {
+        <script>
+            setupTableFilter("userFilterInput", "#userTable tbody tr");
+        </script>
+    }
+    <script>
+        async function setUserActive(userId, isActive) {
+            const url = "@Url.Action("SetActive", "Users")";
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ userId, isActive })
+            });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (_) {}
+            if (!res.ok || data?.success === false) {
+                showToast(data?.message || "İşlem başarısız.", "error");
+                return;
+            }
+            showToast(data?.message || "Tamam.", "success");
+            window.location.reload();
+        }
+    </script>
+}

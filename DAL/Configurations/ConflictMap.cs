@@ -21,19 +21,17 @@ namespace DAL.Configurations
             builder.Property(x => x.DetectedAt).IsRequired();
 
             builder.HasOne(x => x.Script)
-                .WithMany(x => x.PrimaryConflicts)
+                .WithMany()
                 .HasForeignKey(x => x.ScriptId)
                 .OnDelete(DeleteBehavior.Restrict);
             builder.HasOne(x => x.ConflictingScript)
-               .WithMany(x => x.SecondaryConflicts)
+               .WithMany()
                .HasForeignKey(x => x.ConflictingScriptId)
                .OnDelete(DeleteBehavior.Restrict);
             builder.HasOne(x => x.ResolvedByUser)
              .WithMany(x => x.ResolvedConflicts)
              .HasForeignKey(x => x.ResolvedBy)
              .OnDelete(DeleteBehavior.SetNull);
-            builder.Property(x => x.Severity).IsRequired();
-            builder.Property(x => x.Status).IsRequired();
         }
     }
 }
