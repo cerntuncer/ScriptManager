@@ -12,6 +12,7 @@ namespace DAL.Entities
         public string Name { get; set; } = null!;
         public long? ReleaseId { get; set; }
         public long? ParentBatchId { get; set; }
+        public bool IsLocked { get; set; }
         public long CreatedBy { get; set; }
         public Release? Release { get; set; }
         public Batch? Parent { get; set; }

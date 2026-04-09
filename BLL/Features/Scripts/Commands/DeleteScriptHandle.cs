@@ -1,90 +1,62 @@
-﻿using DAL.Entities;
+﻿using BLL.Services;
+using DAL.Context;
+using DAL.Entities;
 using DAL.Enums;
-using DAL.Repositories.Interfaces;
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Features.Scripts.Commands
 {
     public class DeleteScriptHandle : IRequestHandler<DeleteScriptRequest, DeleteScriptResponse>
     {
-        private readonly IRepository<Script> _scriptRepository;
-        private readonly IRepository<Commit> _commitRepository;
-        private readonly IRepository<DAL.Entities.User> _userRepository;
+        private readonly MyContext _db;
+        private readonly IScriptConflictSyncService _conflictSync;
 
-        public DeleteScriptHandle(
-            IRepository<Script> scriptRepository,
-            IRepository<Commit> commitRepository,
-            IRepository<DAL.Entities.User> userRepository)
+        public DeleteScriptHandle(MyContext db, IScriptConflictSyncService conflictSync)
         {
-            _scriptRepository = scriptRepository;
-            _commitRepository = commitRepository;
-            _userRepository = userRepository;
+            _db = db;
+            _conflictSync = conflictSync;
         }
 
         public async Task<DeleteScriptResponse> Handle(DeleteScriptRequest request, CancellationToken cancellationToken)
         {
-
-            var script = await _scriptRepository.GetByIdAsync(request.ScriptId);
+            var script = await _db.Scripts
+                .FirstOrDefaultAsync(s => s.Id == request.ScriptId && !s.IsDeleted, cancellationToken);
 
             if (script == null)
             {
-                return new DeleteScriptResponse
-                {
-                    Success = false,
-                    Message = "Script bulunamadı."
-                };
+                return new DeleteScriptResponse { Success = false, Message = "Script bulunamadı." };
             }
 
             if (script.Status == ScriptStatus.Deleted)
             {
-                return new DeleteScriptResponse
-                {
-                    Success = false,
-                    Message = "Script zaten silinmiş."
-                };
+                return new DeleteScriptResponse { Success = false, Message = "Script zaten silinmiş." };
             }
 
-            var actor = await _userRepository.GetByIdAsync(request.UserId);
-            if (actor == null || actor.IsDeleted || !actor.IsActive)
-            {
-                return new DeleteScriptResponse { Success = false, Message = "Kullanıcı geçersiz." };
-            }
+            var id = script.Id;
+            var conflictRows = await _db.Conflicts
+                .Where(c => c.ScriptId == id || c.ConflictingScriptId == id)
+                .ToListAsync(cancellationToken);
+            var recomputeIds = conflictRows
+                .SelectMany(c => new[] { c.ScriptId, c.ConflictingScriptId })
+                .Where(x => x != id)
+                .ToHashSet();
 
-            if (actor.Role == UserRole.Tester)
-            {
-                return new DeleteScriptResponse { Success = false, Message = "Testçi rolü script silemez." };
-            }
-
-            if (actor.Role == UserRole.Developer && script.DeveloperId != actor.Id)
-            {
-                return new DeleteScriptResponse { Success = false, Message = "Yalnızca kendi scriptinizi silebilirsiniz." };
-            }
+            _db.Conflicts.RemoveRange(conflictRows);
 
             script.Status = ScriptStatus.Deleted;
+            script.UpdatedAt = DateTime.UtcNow;
+            _db.Scripts.Update(script);
 
-            _scriptRepository.Update(script);
+            await _db.SaveChangesAsync(cancellationToken);
 
-
-            var commit = new Commit
-            {
-                ScriptId = script.Id,
-                UserId = request.UserId,
-                CreatedAt = DateTime.Now
-            };
-
-            await _commitRepository.AddAsync(commit);
-
-            await _scriptRepository.SaveAsync();
+            foreach (var oid in recomputeIds)
+                await _conflictSync.RecomputeScriptStatusAsync(oid);
 
             return new DeleteScriptResponse
             {
                 Success = true,
-                Message = "Script başarıyla silindi.",
+                Message = "Script silindi.",
                 ScriptId = script.Id
             };
         }

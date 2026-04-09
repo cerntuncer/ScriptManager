@@ -1,0 +1,164 @@
+@model ScriptManager.Models.Release.ReleaseDetailViewModel
+@using System.Text.Json
+@using ScriptManager.Models.Script
+@{
+    var isAdmin = ViewBag.IsAdmin as bool? == true;
+    var canWrite = ViewBag.CanWrite as bool? == true;
+    var currentUserId = ViewBag.CurrentUserId as long?;
+    var treeLocked = Model.IsTreeLocked;
+    var stateObj = new
+    {
+        releaseId = Model.ReleaseId,
+        version = Model.Version ?? "",
+        isTreeLocked = treeLocked,
+        isCancelled = Model.IsCancelled,
+        batches = Model.BatchPickerOptions.Select(b => new { batchId = b.BatchId, label = b.Label }).ToList()
+    };
+}
+
+<div class="panel-card mb-4">
+    <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h3 class="mb-0">Klasör yapısı</h3>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            @if (Model.IsCancelled)
+            {
+                <span class="badge text-bg-warning text-dark small">İptal edildi</span>
+            }
+            @if (treeLocked && !Model.IsCancelled)
+            {
+                <span class="badge text-bg-secondary small">Kilitli</span>
+            }
+            @if (canWrite && treeLocked && !Model.IsCancelled)
+            {
+                <button type="button" class="btn btn-sm btn-warning text-dark"
+                        onclick="postReleaseTreeLock(@Model.ReleaseId, false)">Düzenlemeye aç</button>
+            }
+            @if (canWrite && !treeLocked && Model.FolderTree.Count > 0 && !Model.IsCancelled)
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="postReleaseTreeLock(@Model.ReleaseId, true)">Ağacı kilitle</button>
+                <button type="button" class="btn btn-sm btn-primary"
+                        onclick="openReleaseDetailAddScriptModal()">Script ekle</button>
+                <button type="button" class="btn btn-sm btn-outline-primary"
+                        onclick="openReleaseDetailAddSubbatchModal()">Alt klasör</button>
+            }
+        </div>
+    </div>
+    <div class="p-3">
+        @if (Model.IsCancelled)
+        {
+            <p class="alert alert-secondary small mb-0">
+                Bu sürüm kaydı iptal edilmiştir; klasörler <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a> sayfasına dönmüş ve kilitleri açılmıştır.
+            </p>
+        }
+        else if (Model.FolderTree.Count == 0)
+        {
+            <p class="text-muted small mb-0">Ağaç yüklenemedi. Sayfayı yenileyin veya destek ile iletişime geçin.</p>
+        }
+        else
+        {
+            <div class="sm-tree">
+                @foreach (var root in Model.FolderTree)
+                {
+                    <partial name="_BatchFolderTree" model="root" />
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (Model.Scripts.Count > 0)
+{
+    <div class="panel-card mb-4">
+        <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="mb-0">Script sırası ve seçmeli dışa aktarım</h3>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="exportSelectedReleaseSql()">Seçilenleri .sql indir</button>
+        </div>
+        <div class="table-wrap custom-scroll p-0">
+            <table class="modern-table mb-0">
+                <thead>
+                <tr>
+                    <th class="w-1"></th>
+                    <th>Sıra</th>
+                    <th>Ad</th>
+                    <th>Geliştirici</th>
+                    <th>Tablolar (tahmini)</th>
+                    <th>Önb.</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var s in Model.Scripts)
+                {
+                    var mayPick = isAdmin || User.IsInRole("Tester") || (currentUserId.HasValue && s.DeveloperId == currentUserId.Value);
+                    <tr>
+                        <td>
+                            @if (mayPick)
+                            {
+                                <input type="checkbox" class="export-script-cb form-check-input" value="@s.ScriptId" />
+                            }
+                        </td>
+                        <td>@s.Order</td>
+                        <td><a href="@Url.Action("Detail", "Scripts", new { id = s.ScriptId })">@s.Name</a></td>
+                        <td>@s.DeveloperName</td>
+                        <td class="small text-muted">@s.ReferencedTablesDisplay</td>
+                        <td>
+                            @if (s.HasCacheBustHints)
+                            {
+                                <span class="badge text-bg-warning text-dark" title="@s.CacheBustSummary">!</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mb-0 px-3 py-2">Sıra, birleşik SQL ile aynı (klasör ağacı post-order).</p>
+    </div>
+}
+
+<div class="content-grid single-column">
+    <section class="panel-card">
+        <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="mb-0">Birleşik SQL</h3>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    onclick="downloadTextFile('@((Model.Version ?? "").Replace("\\","_").Replace("/","_"))-release.sql', document.getElementById('releaseSqlBlock')?.innerText ?? '')">
+                .sql indir
+            </button>
+        </div>
+        @if (string.IsNullOrWhiteSpace(Model.CombinedSql))
+        {
+            <p class="text-muted mb-0 px-3 py-2">SQL yok.</p>
+        }
+        else
+        {
+            <pre id="releaseSqlBlock" class="code-box">@Model.CombinedSql</pre>
+        }
+    </section>
+
+    <section class="panel-card code-panel">
+        <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="mb-0">Birleşik rollback</h3>
+            @if (!string.IsNullOrWhiteSpace(Model.CombinedRollback))
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="downloadTextFile('@((Model.Version ?? "").Replace("\\","_").Replace("/","_"))-rollback.sql', document.getElementById('releaseRbBlock')?.innerText ?? '')">
+                    Rollback indir
+                </button>
+            }
+        </div>
+        @if (string.IsNullOrWhiteSpace(Model.CombinedRollback))
+        {
+            <p class="text-muted mb-0 px-3 py-2">Rollback metni yok.</p>
+        }
+        else
+        {
+            <pre id="releaseRbBlock" class="code-box">@Model.CombinedRollback</pre>
+        }
+    </section>
+</div>
+
+<textarea id="release-detail-state-json" class="d-none" readonly>@Html.Raw(JsonSerializer.Serialize(stateObj))</textarea>

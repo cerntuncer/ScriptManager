@@ -1,4 +1,4 @@
-﻿using BLL.Features.Batchs.Commands;
+using BLL.Features.Batchs.Commands;
 using BLL.Features.Batchs.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/batches")]
     public class BatchController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -17,14 +17,14 @@ namespace API.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(CreateBatchRequest request)
+        public async Task<IActionResult> Create([FromBody] CreateBatchRequest request)
         {
             var result = await _mediator.Send(request);
 
             if (!result.Success)
                 return BadRequest(result);
 
-            return Ok(result);
+            return CreatedAtAction(nameof(GetById), new { id = result.BatchId }, result);
         }
 
         [HttpGet]
@@ -36,8 +36,11 @@ namespace API.Controllers
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> Get(long id)
+        public async Task<IActionResult> GetById(long id)
         {
+            if (id <= 0)
+                return BadRequest(new { message = "Geçersiz batch id." });
+
             var result = await _mediator.Send(new GetBatchByIdRequest { BatchId = id });
 
             if (!result.Success)

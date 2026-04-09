@@ -17,7 +17,7 @@ public static class AuthHelper
         return long.TryParse(v, out var id) ? id : null;
     }
 
-    /// <summary>Commit / çözüm kayıtları için: id claim veya aktif ilk yönetici (veya kullanıcı).</summary>
+    /// <summary>İşlemi yapan kullanıcı: id claim veya aktif ilk yönetici (veya kullanıcı).</summary>
     public static async Task<long> GetActorUserIdAsync(ClaimsPrincipal user, MyContext db,
         CancellationToken cancellationToken = default)
     {

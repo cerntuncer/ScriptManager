@@ -24,7 +24,6 @@ namespace DAL.Repositories.Concretes
                 .Where(x => !x.IsDeleted && x.Status != ScriptStatus.Deleted)
                 .Include(x => x.Batch)
                 .Include(x => x.Developer)
-                .Include(x => x.Commits)
                 .ToListAsync();
         }
 
@@ -33,7 +32,6 @@ namespace DAL.Repositories.Concretes
             return await _context.Scripts
                 .Include(x => x.Batch)
                 .Include(x => x.Developer)
-                .Include(x => x.Commits)
                 .FirstOrDefaultAsync(x => x.Id == id);
         }
 

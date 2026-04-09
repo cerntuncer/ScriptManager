@@ -27,13 +27,14 @@ html, body {
 }
 
 body {
-    overflow: hidden;
+    overflow: auto;
 }
 
 .app-shell {
     display: grid;
     grid-template-columns: 280px 1fr;
-    height: 100vh;
+    min-height: 100vh;
+    height: auto;
 }
 
 .app-sidebar {
@@ -60,7 +61,7 @@ body {
 
 .app-content {
     padding: 24px;
-    overflow: auto;
+    overflow: visible;
 }
 
 .sidebar-brand {

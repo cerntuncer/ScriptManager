@@ -1,73 +1,121 @@
-﻿using DAL.Entities;
+﻿using DAL.Context;
+using DAL.Entities;
+using DAL.Enums;
 using DAL.Repositories.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using MediatR;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BLL.Features.Batchs.Commands
 {
     public class CreateBatchHandle : IRequestHandler<CreateBatchRequest, CreateBatchResponse>
     {
-        private readonly IRepository<Batch> _batchRepository;
-        private readonly IRepository<DAL.Entities.User> _userRepository;
+        private readonly MyContext _db;
+        private readonly IBatchRepository _batchRepository;
 
-        public CreateBatchHandle(
-            IRepository<Batch> batchRepository,
-            IRepository<DAL.Entities.User> userRepository)
+        public CreateBatchHandle(MyContext db, IBatchRepository batchRepository)
         {
+            _db = db;
             _batchRepository = batchRepository;
-            _userRepository = userRepository;
         }
 
-        public async Task<CreateBatchResponse> Handle(CreateBatchRequest request, CancellationToken cancellationToken)
+        public async Task<CreateBatchResponse> Handle(CreateBatchRequest request,
+            CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.Name))
+            var name = string.IsNullOrWhiteSpace(request.Name) ? "Batch" : request.Name.Trim();
+
+            Batch batch;
+            if (request.ParentBatchId > 0)
             {
-                return new CreateBatchResponse
+                var parent = await _batchRepository.GetActiveByIdAsync(request.ParentBatchId, cancellationToken);
+                if (parent == null)
+                    return new CreateBatchResponse { Success = false, Message = "Üst batch bulunamadı." };
+                if (parent.IsLocked)
+                    return new CreateBatchResponse { Success = false, Message = "Kilitli klasöre alt batch eklenemez." };
+
+                var hasScripts = await _db.Scripts.AnyAsync(
+                    s => s.BatchId == parent.Id && !s.IsDeleted && s.Status != ScriptStatus.Deleted,
+                    cancellationToken);
+                if (hasScripts)
+                    return new CreateBatchResponse
+                        { Success = false, Message = "Script içeren klasöre alt batch eklenemez." };
+
+                batch = new Batch
                 {
-                    Success = false,
-                    Message = "Batch adı boş olamaz."
+                    Name = name,
+                    ParentBatchId = parent.Id,
+                    ReleaseId = parent.ReleaseId,
+                    IsLocked = false,
+                    CreatedBy = request.CreatedBy,
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false
+                };
+            }
+            else if (request.ReleaseId.HasValue && request.ReleaseId.Value > 0)
+            {
+                var release = await _db.Releases.FirstOrDefaultAsync(
+                    r => r.Id == request.ReleaseId.Value && !r.IsDeleted, cancellationToken);
+                if (release == null)
+                    return new CreateBatchResponse { Success = false, Message = "Release bulunamadı." };
+                if (release.IsCancelled)
+                    return new CreateBatchResponse { Success = false, Message = "İptal edilmiş sürüme klasör eklenemez." };
+
+                if (!release.RootBatchId.HasValue)
+                {
+                    batch = new Batch
+                    {
+                        Name = name,
+                        ParentBatchId = null,
+                        ReleaseId = release.Id,
+                        IsLocked = false,
+                        CreatedBy = request.CreatedBy,
+                        CreatedAt = DateTime.UtcNow,
+                        IsDeleted = false
+                    };
+                }
+                else
+                {
+                    var rootBatch =
+                        await _batchRepository.GetActiveByIdAsync(release.RootBatchId.Value, cancellationToken);
+                    if (rootBatch == null)
+                        return new CreateBatchResponse { Success = false, Message = "Kök batch bulunamadı." };
+                    if (rootBatch.IsLocked)
+                        return new CreateBatchResponse { Success = false, Message = "Bu sürüm kilitli; klasör eklenemez." };
+
+                    batch = new Batch
+                    {
+                        Name = name,
+                        ParentBatchId = release.RootBatchId,
+                        ReleaseId = release.Id,
+                        IsLocked = false,
+                        CreatedBy = request.CreatedBy,
+                        CreatedAt = DateTime.UtcNow,
+                        IsDeleted = false
+                    };
+                }
+            }
+            else
+            {
+                batch = new Batch
+                {
+                    Name = name,
+                    ParentBatchId = null,
+                    ReleaseId = null,
+                    IsLocked = false,
+                    CreatedBy = request.CreatedBy,
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false
                 };
             }
 
-            var existing = await _batchRepository.GetWhereAsync(x => x.Name == request.Name && !x.IsDeleted);
-            if (existing.Any())
-            {
-                return new CreateBatchResponse
-                {
-                    Success = false,
-                    Message = "Bu isimde batch zaten mevcut."
-                };
-            }
-
-            var user = await _userRepository.GetByIdAsync(request.CreatedBy);
-            if (user == null)
-            {
-                return new CreateBatchResponse
-                {
-                    Success = false,
-                    Message = "Geçersiz kullanıcı. Batch oluşturulamadı."
-                };
-            }
-
-            var batch = new Batch
-            {
-                Name = request.Name,
-                ReleaseId = null,
-                CreatedBy = request.CreatedBy,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _batchRepository.AddAsync(batch);
-            await _batchRepository.SaveAsync();
+            _db.Batches.Add(batch);
+            await _db.SaveChangesAsync(cancellationToken);
 
             return new CreateBatchResponse
             {
                 Success = true,
-                Message = "Batch başarıyla oluşturuldu.",
-                BatchId = batch.Id
+                Message = "Batch oluşturuldu.",
+                BatchId = batch.Id,
+                BatchName = batch.Name
             };
         }
     }

@@ -27,9 +27,12 @@ namespace DAL.Configurations
                    .IsRequired()
                    .HasMaxLength(50);
 
-            builder.HasIndex(x => x.Version).IsUnique();
+            builder.HasIndex(x => x.Version)
+                .IsUnique()
+                .HasFilter("[IsCancelled] = CAST(0 AS bit) AND [IsDeleted] = CAST(0 AS bit)");
 
             builder.Property(x => x.IsActive).HasDefaultValue(true);
+            builder.Property(x => x.IsCancelled).HasDefaultValue(false);
 
             builder.HasOne(x => x.Creator)
                 .WithMany(x => x.CreatedReleases)

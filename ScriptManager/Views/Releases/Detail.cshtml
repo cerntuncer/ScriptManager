@@ -1,0 +1,165 @@
+@model ScriptManager.Models.Release.ReleaseDetailViewModel
+@using System.Text.Json
+
+@using ScriptManager.Models.Script
+@{
+    var devs = ViewBag.Developers as IEnumerable<UserOptionViewModel> ?? Array.Empty<UserOptionViewModel>();
+    var devJson = JsonSerializer.Serialize(devs.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }));
+    var isAdmin = ViewBag.IsAdmin as bool? == true;
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@Model.ReleaseName <span class="text-muted fs-5">@Model.Version</span></h1>
+        <p class="page-sub text-muted mb-0 small">
+            @if (Model.IsCancelled)
+            {
+                <span>İptal edilmiş sürüm kaydı; düzenleme yok.</span>
+            }
+            else if (Model.IsTreeLocked)
+            {
+                <span>Ağaç kilitli, yalnızca görüntüleme yapılır. Düzenleme için <strong>Düzenlemeye aç</strong> kullanın.</span>
+            }
+            else
+            {
+                <span>Ağaç düzenlemeye açık. Bu sürümde seçtiğiniz klasöre doğrudan script ekleyebilir veya alt klasör oluşturabilirsiniz.</span>
+            }
+        </p>
+    </div>
+    <div class="page-actions d-flex flex-wrap gap-2">
+        @if (isAdmin && !Model.IsCancelled)
+        {
+            <button type="button" class="btn btn-outline-warning modern-btn text-dark" onclick="cancelThisRelease(@Model.ReleaseId)">Sürümü iptal et</button>
+        }
+        <a class="btn btn-light modern-btn" href="@Url.Action("Index", "Releases")">← Release listesi</a>
+    </div>
+</div>
+
+<div id="release-detail-refresh">
+    <partial name="_ReleaseDetailRefresh" model="Model" />
+</div>
+
+@section Scripts {
+    <script>
+        window.__releaseDetailMeta = {
+            releaseId: @Model.ReleaseId,
+            isTreeLocked: @(Model.IsTreeLocked ? "true" : "false"),
+            isCancelled: @(Model.IsCancelled ? "true" : "false")
+        };
+        window.__releaseDetailBatches = @Html.Raw(JsonSerializer.Serialize(Model.BatchPickerOptions.Select(b => new { batchId = b.BatchId, label = b.Label })));
+        window.__scriptCreateMeta = { batches: [], developers: @Html.Raw(devJson) };
+        window.__scriptCreateUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            createWizardContext = Url.Action("CreateWizardContext", "Scripts"),
+            create = Url.Action("Create", "Scripts"),
+            batchesIndex = Url.Action("Index", "Batches"),
+            developerOptions = Url.Action("DeveloperOptions", "Scripts"),
+            addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            batchPath = Url.Action("BatchPath", "Batches"),
+            detailUrlPlaceholder = Url.Action("Detail", "Scripts", new { id = 999999999L })
+        }));
+        window.__releaseDetailUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            addFolder = Url.Action("AddFolder", "Releases"),
+            scriptPicker = Url.Action("ListForPicker", "Scripts"),
+            exportSelectedSql = Url.Action("ExportSelectedSql", "Releases"),
+            cancelOne = Url.Action("CancelOne", "Releases"),
+            detailRefresh = Url.Action("DetailRefresh", "Releases"),
+            setTreeLock = Url.Action("SetTreeLock", "Releases"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            batchPath = Url.Action("BatchPath", "Batches")
+        }));
+    </script>
+    <script>
+        async function refreshReleaseDetailPanels() {
+            const base = window.__releaseDetailUrls?.detailRefresh;
+            const id = window.__releaseDetailMeta?.releaseId;
+            if (!base || !id) {
+                window.location.reload();
+                return;
+            }
+            const url = `${base}?id=${encodeURIComponent(id)}`;
+            const res = await fetch(url, { headers: { Accept: "text/html" } });
+            if (!res.ok) {
+                window.location.reload();
+                return;
+            }
+            const html = await res.text();
+            const host = document.getElementById("release-detail-refresh");
+            if (!host) {
+                window.location.reload();
+                return;
+            }
+            host.innerHTML = html;
+            const st = document.getElementById("release-detail-state-json");
+            const raw = st && ("value" in st ? st.value : st.textContent);
+            if (raw) {
+                try {
+                    const o = JSON.parse(raw);
+                    if (Array.isArray(o.batches)) window.__releaseDetailBatches = o.batches;
+                    if (o.releaseId)
+                        window.__releaseDetailMeta = {
+                            releaseId: o.releaseId,
+                            isTreeLocked: o.isTreeLocked === true,
+                            isCancelled: o.isCancelled === true
+                        };
+                } catch (_) {}
+            }
+        }
+
+        async function exportSelectedReleaseSql() {
+            const url = window.__releaseDetailUrls?.exportSelectedSql;
+            const releaseId = window.__releaseDetailMeta?.releaseId ?? 0;
+            if (!url || !releaseId) {
+                showToast("Dışa aktarım adresi eksik.", "error");
+                return;
+            }
+            const ids = Array.from(document.querySelectorAll(".export-script-cb:checked"))
+                .map((cb) => Number(cb.value))
+                .filter((n) => n > 0);
+            if (ids.length === 0) {
+                showToast("En az bir script seçin.", "error");
+                return;
+            }
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/octet-stream" },
+                body: JSON.stringify({ releaseId, scriptIds: ids })
+            });
+            if (!res.ok) {
+                showToast("Dışa aktarım başarısız.", "error");
+                return;
+            }
+            const blob = await res.blob();
+            const dispo = res.headers.get("Content-Disposition");
+            let filename = "release-selected.sql";
+            if (dispo && dispo.includes("filename=")) {
+                const m = /filename\*=UTF-8''([^;\n]+)|filename="([^"]+)"/i.exec(dispo);
+                filename = decodeURIComponent(m?.[1] || m?.[2] || filename);
+            }
+            downloadTextFile(filename, await blob.text());
+            showToast("Dosya indirildi.", "success");
+        }
+
+        async function cancelThisRelease(releaseId) {
+            const url = window.__releaseDetailUrls?.cancelOne;
+            if (!url) {
+                showToast("İptal adresi eksik.", "error");
+                return;
+            }
+            if (!confirm("Sürüm iptal edilecek: kayıt silinmez, klasörler genel alana döner ve kilitler açılır. Onaylıyor musunuz?")) return;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ releaseId })
+            });
+            let data = null;
+            try { data = await res.json(); } catch (_) {}
+            if (!res.ok || data?.success === false) {
+                showToast(data?.message || "İptal edilemedi.", "error");
+                return;
+            }
+            showToast(data?.message || "İptal edildi.", "success");
+            window.location.reload();
+        }
+    </script>
+}

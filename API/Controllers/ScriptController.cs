@@ -1,4 +1,4 @@
-﻿using BLL.Features.Scripts.Commands;
+using BLL.Features.Scripts.Commands;
 using BLL.Features.Scripts.Queries;
 using BLL.Features.Users.Queries;
 using MediatR;
@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/scripts")]
     public class ScriptController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -28,9 +28,13 @@ namespace API.Controllers
             return Ok(result);
         }
 
-        [HttpPut]
-        public async Task<IActionResult> Update(UpdateScriptRequest request)
+        [HttpPut("{id:long}")]
+        public async Task<IActionResult> Update(long id, [FromBody] UpdateScriptRequest request)
         {
+            if (id <= 0)
+                return BadRequest(new { message = "Geçersiz script id." });
+            request.ScriptId = id;
+
             var result = await _mediator.Send(request);
 
             if (!result.Success)
@@ -61,16 +65,6 @@ namespace API.Controllers
             return Ok(result);
         }
 
-        [HttpGet("{id}/commits")]
-        public async Task<IActionResult> GetCommits(long id)
-        {
-            var result = await _mediator.Send(new GetScriptCommitsRequest
-            {
-                ScriptId = id
-            });
-
-            return Ok(result);
-        }
         [HttpGet("list")]
         public async Task<IActionResult> GetList()
         {
@@ -78,26 +72,5 @@ namespace API.Controllers
             return Ok(result);
         }
 
-        [HttpPost("change-status")]
-        public async Task<IActionResult> ChangeStatus(ChangeScriptStatusRequest request)
-        {
-            var result = await _mediator.Send(request);
-
-            if (!result.Success)
-                return BadRequest(result);
-
-            return Ok(result);
-        }
-
-        [HttpPost("move-to-batch")]
-        public async Task<IActionResult> MoveToBatch(MoveScriptToBatchRequest request)
-        {
-            var result = await _mediator.Send(request);
-
-            if (!result.Success)
-                return BadRequest(result);
-
-            return Ok(result);
-        }
     }
 }

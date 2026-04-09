@@ -1,4 +1,4 @@
-﻿using BLL.Common;
+using BLL.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,5 +10,6 @@ namespace BLL.Features.Batchs.Commands
     public class CreateBatchResponse : BaseResponse
     {
         public long BatchId { get; set; }
+        public string? BatchName { get; set; }
     }
 }

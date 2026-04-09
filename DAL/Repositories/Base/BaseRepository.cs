@@ -81,8 +81,7 @@ namespace DAL.Repositories.Base
         {
             if (entity == null) return;
 
-            // If this instance comes from a filtered query and is soft-deleted,
-            // ensure it can still be deleted physically.
+           
             var tracked = _context.Entry(entity);
             if (tracked.State == EntityState.Detached)
             {

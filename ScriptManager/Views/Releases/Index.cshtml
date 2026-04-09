@@ -1,0 +1,140 @@
+@model ScriptManager.Models.Release.ReleasesIndexViewModel
+@using System.Text.Json
+
+@{
+    var devJson = JsonSerializer.Serialize(Model.Developers.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }));
+    var isAdmin = ViewBag.IsAdmin as bool? == true;
+    var canWrite = ViewBag.CanWrite as bool? == true;
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Releases</h1>
+        <p class="page-sub text-muted mb-0 small">Release oluştururken klasör ağacındaki onaylı ana kök klasörlerden biri seçilir. Klasör hazırlığı için <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a>.</p>
+    </div>
+    @if (canWrite)
+    {
+        <div class="page-actions">
+            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openCreateReleaseModal()">Yeni release</button>
+        </div>
+    }
+</div>
+
+<div class="panel-card">
+    <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h3 class="mb-0">Release listesi</h3>
+        @if (isAdmin)
+        {
+            <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="bulkCancelSelectedReleases()">Seçilenleri iptal et</button>
+        }
+    </div>
+
+    <div class="table-toolbar">
+        <input id="releaseFilterInput" class="table-filter-input" placeholder="Versiyon ara..." />
+    </div>
+
+    <div class="table-wrap custom-scroll">
+        <table class="modern-table" id="releaseTable">
+            <thead>
+                <tr>
+                    @if (isAdmin)
+                    {
+                        <th class="w-1"><input type="checkbox" id="releaseSelectAll" title="Tümünü seç" /></th>
+                    }
+                    <th>Durum</th>
+                    <th>Release</th>
+                    <th>Versiyon</th>
+                    <th>Script</th>
+                    <th>Rollback</th>
+                    <th>Oluşturulma</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="releaseTableBody">
+                @foreach (var item in Model.Releases)
+                {
+                    <tr>
+                        @if (isAdmin)
+                        {
+                            <td>
+                                @if (!item.IsCancelled)
+                                {
+                                    <input type="checkbox" class="release-row-cb form-check-input" value="@item.ReleaseId" />
+                                }
+                            </td>
+                        }
+                        <td>
+                            @if (item.IsCancelled)
+                            {
+                                <span class="badge text-bg-secondary small">İptal</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Aktif</span>
+                            }
+                        </td>
+                        <td>@item.Name</td>
+                        <td>@item.Version</td>
+                        <td>@item.ScriptCount</td>
+                        <td>@item.RollbackScriptCount</td>
+                        <td>@item.CreatedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            <a class="btn btn-sm btn-table" href="@Url.Action("Detail", "Releases", new { id = item.ReleaseId })">Detay</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        window.__releaseCreateMeta = { developers: @Html.Raw(devJson) };
+        window.__releaseCreateUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            create = Url.Action("Create", "Releases"),
+            developerOptions = Url.Action("DeveloperOptions", "Scripts"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            detailUrlPlaceholder = Url.Action("Detail", "Releases", new { id = 999999999L }),
+            bulkCancel = Url.Action("BulkCancel", "Releases")
+        }));
+    </script>
+    <script>
+        setupTableFilter("releaseFilterInput", "#releaseTable tbody tr");
+        document.getElementById("releaseSelectAll")?.addEventListener("change", function () {
+            const on = this.checked;
+            document.querySelectorAll(".release-row-cb").forEach((cb) => (cb.checked = on));
+        });
+
+        async function bulkCancelSelectedReleases() {
+            const url = window.__releaseCreateUrls?.bulkCancel;
+            if (!url) {
+                showToast("Toplu iptal adresi tanımsız.", "error");
+                return;
+            }
+            const ids = Array.from(document.querySelectorAll(".release-row-cb:checked"))
+                .map((cb) => Number(cb.value))
+                .filter((n) => n > 0);
+            if (ids.length === 0) {
+                showToast("Sürüm seçin.", "error");
+                return;
+            }
+            if (!confirm(ids.length + " sürüm iptal edilecek; klasörler genel alana döner, kayıt silinmez. Devam?")) return;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ releaseIds: ids })
+            });
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (_) {}
+            if (!res.ok || data?.success === false) {
+                showToast(data?.message || "İşlem başarısız.", "error");
+                return;
+            }
+            showToast(data?.message || "Tamam.", "success");
+            window.location.reload();
+        }
+    </script>
+}

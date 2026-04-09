@@ -1,15 +1,12 @@
 using MediatR;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BLL.Features.Batchs.Commands
 {
     public class CreateBatchRequest : IRequest<CreateBatchResponse>
     {
-        public string Name { get; set; } // klasör adı
+        public string Name { get; set; } = string.Empty;
         public long CreatedBy { get; set; }
+        public long ParentBatchId { get; set; }
+        public long? ReleaseId { get; set; }
     }
 }

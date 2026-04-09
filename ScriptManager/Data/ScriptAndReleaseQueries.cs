@@ -1,4 +1,3 @@
-using BLL.Data;
 using BLL.Services;
 using DAL.Context;
 using DAL.Entities;
@@ -61,8 +60,8 @@ public static class ScriptReadQueries
     public static async Task<List<BatchPickerOptionViewModel>> ListAllBatchesWithPathAsync(MyContext db)
     {
         var batches = await db.Batches.AsNoTracking()
-            .Where(b => !b.IsDeleted && b.ReleaseId != null)
             .Include(b => b.Release)
+            .Where(b => !b.IsDeleted && b.ReleaseId != null && b.Release != null && !b.Release.IsCancelled)
             .ToListAsync();
 
         var byId = batches.ToDictionary(b => b.Id);
@@ -121,6 +120,30 @@ public static class ReleaseReadQueries
 {
     private static bool IsScriptActive(Script s) =>
         !s.IsDeleted && s.Status != ScriptStatus.Deleted;
+
+    private static async Task<HashSet<long>> CollectSubtreeIdsAsync(MyContext db, long rootBatchId)
+    {
+        var result = new HashSet<long>();
+        var queue = new Queue<long>();
+        queue.Enqueue(rootBatchId);
+
+        while (queue.Count > 0)
+        {
+            var id = queue.Dequeue();
+            if (!result.Add(id))
+                continue;
+
+            var children = await db.Batches.AsNoTracking()
+                .Where(b => b.ParentBatchId == id && !b.IsDeleted)
+                .Select(b => b.Id)
+                .ToListAsync();
+
+            foreach (var childId in children)
+                queue.Enqueue(childId);
+        }
+
+        return result;
+    }
 
     /// <summary>Ağaç post-order ile aktif script sırası (birleşik SQL ile aynı).</summary>
     private static List<Script> OrderScriptsForRelease(Release release, List<Batch> batches)
@@ -195,9 +218,14 @@ public static class ReleaseReadQueries
             Name = r.Name,
             Version = r.Version,
             CreatedAt = r.CreatedAt,
-            ScriptCount = r.Batches.SelectMany(b => b.Scripts).Count(IsScriptActive),
-            RollbackScriptCount = r.Batches.SelectMany(b => b.Scripts).Count(s =>
-                IsScriptActive(s) && !string.IsNullOrWhiteSpace(s.RollbackScript))
+            IsCancelled = r.IsCancelled,
+            ScriptCount = r.IsCancelled
+                ? 0
+                : r.Batches.SelectMany(b => b.Scripts).Count(IsScriptActive),
+            RollbackScriptCount = r.IsCancelled
+                ? 0
+                : r.Batches.SelectMany(b => b.Scripts).Count(s =>
+                    IsScriptActive(s) && !string.IsNullOrWhiteSpace(s.RollbackScript))
         }).ToList();
     }
 
@@ -209,6 +237,25 @@ public static class ReleaseReadQueries
         if (release == null)
             return null;
 
+        if (release.IsCancelled)
+        {
+            return new ReleaseDetailViewModel
+            {
+                Success = true,
+                Message = "Bu sürüm iptal edildi; klasörler ve scriptler klasör ağacında.",
+                ReleaseId = release.Id,
+                ReleaseName = release.Name,
+                Version = release.Version,
+                CombinedSql = string.Empty,
+                CombinedRollback = string.Empty,
+                Scripts = new List<ReleaseScriptItemViewModel>(),
+                FolderTree = new List<ReleaseBatchFolderViewModel>(),
+                BatchPickerOptions = new List<BatchPickerOptionViewModel>(),
+                IsTreeLocked = false,
+                IsCancelled = true
+            };
+        }
+
         var batches = await db.Batches.AsNoTracking()
             .Where(b => b.ReleaseId == id && !b.IsDeleted)
             .Include(b => b.Scripts)
@@ -217,9 +264,8 @@ public static class ReleaseReadQueries
 
         if (release.RootBatchId.HasValue)
         {
-            var allowed = await BatchTreeHelper.CollectSubtreeIdsAsync(db, release.RootBatchId.Value);
-            var set = allowed.ToHashSet();
-            batches = batches.Where(b => set.Contains(b.Id)).ToList();
+            var allowed = await CollectSubtreeIdsAsync(db, release.RootBatchId.Value);
+            batches = batches.Where(b => allowed.Contains(b.Id)).ToList();
         }
 
         var byParent = batches.ToLookup(b => b.ParentBatchId);
@@ -272,8 +318,6 @@ public static class ReleaseReadQueries
 
         var folderTree = roots.Select(MapFolder).ToList();
 
-        var releaseBatchIdSet = batches.Select(b => b.Id).ToHashSet();
-
         var batchPathsForPicker = new Dictionary<long, string>();
         foreach (var b in batches)
         {
@@ -290,72 +334,6 @@ public static class ReleaseReadQueries
             batchPathsForPicker[b.Id] = string.Join(" → ", parts);
         }
 
-        var assignableScriptRows = await db.Scripts.AsNoTracking()
-            .Include(s => s.Batch)
-            .Where(s => !s.IsDeleted && s.Status != ScriptStatus.Deleted && s.Status == ScriptStatus.Ready &&
-                (s.BatchId == null || !releaseBatchIdSet.Contains(s.BatchId.Value)))
-            .OrderBy(s => s.Name)
-            .ThenBy(s => s.Id)
-            .ToListAsync();
-
-        var batchByIdAll = new Dictionary<long, Batch>();
-        var toFetch = new Queue<long>(assignableScriptRows.Where(s => s.BatchId.HasValue).Select(s => s.BatchId!.Value).Distinct());
-        while (toFetch.Count > 0)
-        {
-            var chunk = new List<long>();
-            while (toFetch.Count > 0 && chunk.Count < 80)
-            {
-                var next = toFetch.Dequeue();
-                if (!batchByIdAll.ContainsKey(next))
-                    chunk.Add(next);
-            }
-
-            if (chunk.Count == 0) continue;
-            var rows = await db.Batches.AsNoTracking()
-                .Include(b => b.Release)
-                .Where(b => chunk.Contains(b.Id))
-                .ToListAsync();
-            foreach (var row in rows)
-            {
-                if (batchByIdAll.ContainsKey(row.Id)) continue;
-                batchByIdAll[row.Id] = row;
-                if (row.ParentBatchId.HasValue && !batchByIdAll.ContainsKey(row.ParentBatchId.Value))
-                    toFetch.Enqueue(row.ParentBatchId.Value);
-            }
-        }
-
-        string PathFromDict(long batchId)
-        {
-            var parts = new List<string>();
-            Batch? cur = batchByIdAll.GetValueOrDefault(batchId);
-            var g = 0;
-            while (cur != null && g++ < 64)
-            {
-                parts.Insert(0, cur.Name);
-                if (!cur.ParentBatchId.HasValue) break;
-                cur = batchByIdAll.GetValueOrDefault(cur.ParentBatchId.Value);
-            }
-
-            return string.Join(" → ", parts);
-        }
-
-        var assignableItems = assignableScriptRows.Select(s =>
-        {
-            var loc = !s.BatchId.HasValue
-                ? "Atanmamış (havuz)"
-                : batchByIdAll.GetValueOrDefault(s.BatchId.Value) is { } b
-                    ? b.Release == null
-                        ? $"Yetim · {PathFromDict(s.BatchId.Value)}"
-                        : $"{b.Release.Version} · {PathFromDict(s.BatchId.Value)}"
-                    : "—";
-            return new AssignableScriptItemViewModel
-            {
-                ScriptId = s.Id,
-                Name = s.Name,
-                CurrentLocation = loc
-            };
-        }).ToList();
-
         var pickerOptions = batches
             .OrderBy(b => batchPathsForPicker.GetValueOrDefault(b.Id, b.Name))
             .Select(b => new BatchPickerOptionViewModel
@@ -368,6 +346,8 @@ public static class ReleaseReadQueries
         var scriptRows = ordered.Select((s, i) => ScriptReadQueries.ToReleaseScriptItem(s, i + 1,
             batchNameById.GetValueOrDefault(s.BatchId!.Value, string.Empty))).ToList();
 
+        var treeLocked = batches.Any(b => b.IsLocked);
+
         return new ReleaseDetailViewModel
         {
             Success = true,
@@ -379,8 +359,9 @@ public static class ReleaseReadQueries
             CombinedRollback = combinedRb,
             Scripts = scriptRows,
             FolderTree = folderTree,
-            AssignableScripts = assignableItems,
-            BatchPickerOptions = pickerOptions
+            BatchPickerOptions = pickerOptions,
+            IsTreeLocked = treeLocked,
+            IsCancelled = false
         };
     }
 }

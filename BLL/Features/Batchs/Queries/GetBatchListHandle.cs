@@ -26,7 +26,9 @@ namespace BLL.Features.Batchs.Queries
             GetBatchListRequest request,
             CancellationToken cancellationToken)
         {
-            var batches = (await _batchRepository.GetAllAsync()).OrderByDescending(x => x.CreatedAt).ToList();
+            var batches = (await _batchRepository.GetWhereAsync(b => !b.IsDeleted))
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList();
             var batchIds = batches.Select(b => b.Id).ToList();
             var scripts = batchIds.Count == 0
                 ? new List<Script>()

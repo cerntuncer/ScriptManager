@@ -14,6 +14,5 @@ namespace DAL.Entities
         public UserCredential? Credential { get; set; }
         public ICollection<Batch> CreateBatches { get; set; } = new List<Batch>();
         public ICollection<Conflict> ResolvedConflicts { get; set; } = new List<Conflict>();
-        public ICollection<Commit> Commits { get; set; } = new List<Commit>();
     }
 }

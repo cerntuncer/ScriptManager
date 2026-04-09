@@ -1,0 +1,65 @@
+@model List<ScriptManager.Models.Batch.PoolBatchTreeNodeDto>
+@using System.Text.Json
+@{
+    var canWrite = ViewBag.CanWrite as bool? == true;
+    var devs = ViewBag.Developers as IEnumerable<ScriptManager.Models.Script.UserOptionViewModel> ??
+               Array.Empty<ScriptManager.Models.Script.UserOptionViewModel>();
+    var devJson = JsonSerializer.Serialize(devs.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }));
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Klasör Ağacı</h1>
+        <p class="page-sub text-muted mb-0 small">Genel klasörler ve <strong>devam eden sürümlerin</strong> kilitli ağaçları bu sayfada üst seviyede birlikte görünür (sürüm etiketi ile). Script eklerken seçtiğin klasöre doğrudan ekleyebilirsin.</p>
+    </div>
+    @if (canWrite)
+    {
+        <div class="page-actions">
+            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openPoolRootBatchModal()">Üst seviye klasör oluştur</button>
+        </div>
+    }
+</div>
+
+<div class="panel-card">
+    <div class="panel-header">
+        <h3 class="mb-0">Ağaç</h3>
+    </div>
+    <div class="p-3">
+        @if (Model.Count == 0)
+        {
+            <p class="text-muted small mb-0">Henüz klasör yok. Üst seviye klasör oluşturarak başlayın.</p>
+        }
+        else
+        {
+            <ul class="list-unstyled mb-0 pool-batch-tree-root">
+                @foreach (var root in Model)
+                {
+                    <partial name="_PoolBatchTreeNode" model="root" />
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        window.__batchesPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            index = Url.Action("Index", "Batches"),
+            addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            batchPath = Url.Action("BatchPath", "Batches")
+        }));
+        window.__scriptCreateMeta = { developers: @Html.Raw(devJson) };
+        window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            createWizardContext = Url.Action("CreateWizardContext", "Scripts"),
+            create = Url.Action("Create", "Scripts"),
+            batchesIndex = Url.Action("Index", "Batches"),
+            developerOptions = Url.Action("DeveloperOptions", "Scripts"),
+            addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            batchPath = Url.Action("BatchPath", "Batches"),
+            detailUrlPlaceholder = Url.Action("Detail", "Scripts", new { id = 999999999L }),
+            deleteUrlPlaceholder = Url.Action("Delete", "Scripts", new { id = 999999999L })
+        }));
+    </script>
+}

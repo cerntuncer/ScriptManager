@@ -1,10 +1,7 @@
 using DAL.Repositories.Interfaces;
 using MediatR;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BLL.Features.Users.Queries
 {
@@ -25,19 +22,19 @@ namespace BLL.Features.Users.Queries
         {
             var scripts = await _scriptRepository.GetAllDetailedAsync();
             var unresolved = await _conflictRepository.GetUnresolvedConflictsAsync();
-            var tablesByScript = new Dictionary<long, HashSet<string>>();
+            var keysByScript = new Dictionary<long, HashSet<string>>();
             foreach (var c in unresolved)
             {
-                if (!tablesByScript.TryGetValue(c.ScriptId, out var a))
+                if (!keysByScript.TryGetValue(c.ScriptId, out var a))
                 {
                     a = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    tablesByScript[c.ScriptId] = a;
+                    keysByScript[c.ScriptId] = a;
                 }
 
-                if (!tablesByScript.TryGetValue(c.ConflictingScriptId, out var b))
+                if (!keysByScript.TryGetValue(c.ConflictingScriptId, out var b))
                 {
                     b = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    tablesByScript[c.ConflictingScriptId] = b;
+                    keysByScript[c.ConflictingScriptId] = b;
                 }
 
                 a.Add(c.TableName);
@@ -46,7 +43,7 @@ namespace BLL.Features.Users.Queries
 
             return scripts.Select(x =>
             {
-                var has = tablesByScript.TryGetValue(x.Id, out var ts);
+                var has = keysByScript.TryGetValue(x.Id, out var ts);
                 return new GetScriptListResponse
                 {
                     ScriptId = x.Id,

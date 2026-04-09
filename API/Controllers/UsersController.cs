@@ -24,19 +24,11 @@ namespace API.Controllers
             return Ok(response);
         }
 
-
-        [HttpGet("list")]
-        public async Task<IActionResult> GetList()
-        {
-            var rows = await _mediator.Send(new GetUserListRequest());
-            return Ok(rows);
-        }
-
         /// <summary>"list" segmentinin {id} olarak yanlış eşleşmesini engeller.</summary>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetUserById(int id)
         {
-            var request = new GetUserByIdRequest { Id = id };
+            var request = new GetUserRequest { Id = id };
             var response = await _mediator.Send(request);
             return Ok(response);
         }
@@ -49,13 +41,5 @@ namespace API.Controllers
             return Ok(response);
         }
 
-
-        [HttpGet("with-details/{id:int}")]
-        public async Task<IActionResult> GetUserWithDetails(int id)
-        {
-            var request = new GetUserWithDetailsRequest { Id = id };
-            var response = await _mediator.Send(request);
-            return Ok(response);
-        }
     }
 }

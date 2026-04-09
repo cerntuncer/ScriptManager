@@ -1,4 +1,4 @@
-﻿using DAL.Entities;
+using DAL.Entities;
 using DAL.Repositories.Interfaces;
 using MediatR;
 using System;
@@ -61,16 +61,16 @@ namespace BLL.Features.Scripts.Queries
                     OtherScriptId = otherId,
                     OtherScriptName = otherName,
                     WarningMessage =
-                        $"\"{c.TableName}\" tablosu bu script ile \"{otherName}\" (Id:{otherId}) scriptinde ortak; çakışma olabilir, scriptleri kontrol edin."
+                        $"Aynı kayıt ({c.TableName}) bu script ile \"{otherName}\" (Id:{otherId}) scriptinde etkileniyor olabilir; lütfen kontrol edin."
                 };
             }).ToList();
 
-            var tables = open.Select(c => c.TableName).Distinct().OrderBy(s => s).ToList();
+            var keys = open.Select(c => c.TableName).Distinct().OrderBy(s => s).ToList();
             string? summary = null;
-            if (tables.Count > 0)
+            if (keys.Count > 0)
                 summary =
-                    $"Bu script şu tablolar için aynı release kapsamındaki diğer scriptlerle çakışma riski taşıyor: {string.Join(", ", tables)}. " +
-                    "Scriptleri kontrol edin veya çakışma yoksa çakışma listesinden onaylayın.";
+                    $"Bu script aynı kayıt anahtarları için ( {string.Join(", ", keys)} ) diğer scriptlerle çakışma riski taşıyor. " +
+                    "Scriptleri kontrol edin.";
 
             return new GetScriptByIdResponse
             {

@@ -1,7 +1,8 @@
-using BLL.Services;
+using BLL.Features.Scripts.Commands;
 using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ScriptManager.Data;
@@ -13,14 +14,12 @@ namespace ScriptManager.Controllers
     public class ScriptsController : Controller
     {
         private readonly MyContext _db;
-        private readonly IScriptConflictSyncService _conflictSync;
-        private readonly IScriptWorkflowService _workflow;
+        private readonly IMediator _mediator;
 
-        public ScriptsController(MyContext db, IScriptConflictSyncService conflictSync, IScriptWorkflowService workflow)
+        public ScriptsController(MyContext db, IMediator mediator)
         {
             _db = db;
-            _conflictSync = conflictSync;
-            _workflow = workflow;
+            _mediator = mediator;
         }
 
         public async Task<IActionResult> Index()
@@ -66,16 +65,17 @@ namespace ScriptManager.Controllers
             return Json(new { scripts = rows });
         }
 
-        /// <summary>Scripts sayfasında “Yeni script” modalı için batch listesi ve geliştiriciler.</summary>
+        /// <summary>Script oluşturma: havuz batch ağacı ve geliştiriciler.</summary>
         [HttpGet]
-        public async Task<IActionResult> CreateContext()
+        public async Task<IActionResult> CreateWizardContext()
         {
             var developers = await DeveloperReadQueries.ListOptionsAsync(_db);
-            var batches = await ScriptReadQueries.ListAllBatchesWithPathAsync(_db);
+            var poolBatchRoots = await PoolBatchQueries.GetPoolBatchTreeAsync(_db);
+
             return Json(new
             {
                 developers = developers.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }),
-                batches = batches.Select(b => new { batchId = b.BatchId, label = b.Label })
+                poolBatchRoots
             });
         }
 
@@ -107,7 +107,7 @@ namespace ScriptManager.Controllers
             return View(model);
         }
 
-        /// <summary>Taslak → İncelemede / Hazır; İncelemede → Hazır. Roller: iş kuralı <see cref="IScriptWorkflowService"/>.</summary>
+        /// <summary>Taslak -> İncelemede / Hazır; İncelemede -> Hazır durum geçişi.</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ChangeStatus([FromBody] ChangeScriptStatusFormRequest? body)
@@ -118,55 +118,26 @@ namespace ScriptManager.Controllers
             if (!Enum.IsDefined(typeof(ScriptStatus), body.NewStatus))
                 return BadRequest(new { success = false, message = "Geçersiz durum." });
 
-            var newStatus = (ScriptStatus)body.NewStatus;
-            if (newStatus is ScriptStatus.Deleted or ScriptStatus.Conflict)
-                return BadRequest(new { success = false, message = "Bu durum bu işlemle atanamaz." });
-
             var actorId = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var actor = await _db.Users.FirstOrDefaultAsync(u => u.Id == actorId && !u.IsDeleted);
-            if (actor == null)
+            if (actorId <= 0)
                 return BadRequest(new { success = false, message = "Oturum kullanıcısı bulunamadı." });
 
-            if (actor.Role == UserRole.Tester && newStatus != ScriptStatus.Ready)
-                return Forbid();
-
-            var mayChange = actor.Role == UserRole.Admin ||
-                            actor.Role == UserRole.Developer ||
-                            (actor.Role == UserRole.Tester && newStatus == ScriptStatus.Ready);
-            if (!mayChange)
-                return Forbid();
-
-            await _workflow.NormalizeStaleConflictStatusAsync(body.ScriptId);
-
-            var script = await _db.Scripts.FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted);
-            if (script == null || script.Status == ScriptStatus.Deleted)
-                return NotFound(new { success = false, message = "Script bulunamadı." });
-
-            var validation = await _workflow.ValidateTransitionAsync(script, newStatus, actor);
-            if (validation != null)
-                return BadRequest(new { success = false, message = validation });
-
-            var previous = script.Status;
-            script.Status = newStatus;
-            script.UpdatedAt = DateTime.UtcNow;
-            _db.Scripts.Update(script);
-
-            _db.Commits.Add(new Commit
+            var result = await _mediator.Send(new UpdateScriptRequest
             {
-                ScriptId = script.Id,
+                ScriptId = body.ScriptId,
                 UserId = actorId,
-                Type = CommitType.StatusChange,
-                Description = $"{previous} → {newStatus}",
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
+                Status = body.NewStatus
             });
 
-            await _db.SaveChangesAsync();
+            if (!result.Success)
+                return BadRequest(new { success = false, message = result.Message });
+
+            var newStatus = (ScriptStatus)body.NewStatus;
 
             return Json(new
             {
                 success = true,
-                message = "Durum güncellendi.",
+                message = result.Message ?? "Durum güncellendi.",
                 status = newStatus.ToString(),
                 statusDisplay = ScriptReadQueries.ScriptStatusDisplay(newStatus)
             });
@@ -205,53 +176,38 @@ namespace ScriptManager.Controllers
             else if (developerId <= 0)
                 return BadRequest(new ApiMutationResponse { Success = false, Message = "Geliştirici seçin." });
 
-            Batch? batch = null;
-            if (body.BatchId is > 0)
+            var medReq = new CreateScriptRequest
             {
-                batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == body.BatchId.Value && !b.IsDeleted);
-                if (batch == null)
-                    return BadRequest(new ApiMutationResponse { Success = false, Message = "Klasör (batch) bulunamadı." });
-            }
-
-            var developer = await _db.Users.FirstOrDefaultAsync(u => u.Id == developerId);
-            if (developer == null)
-                return BadRequest(new ApiMutationResponse { Success = false, Message = "Seçilen geliştirici bulunamadı." });
-
-            var scriptName = body.Name.Trim();
-            if (await _db.Scripts.AnyAsync(s => s.Name == scriptName))
-                return BadRequest(new ApiMutationResponse { Success = false, Message = "Bu isimde script zaten mevcut." });
-
-            var rollback = string.IsNullOrWhiteSpace(body.RollbackScript) ? null : body.RollbackScript;
-
-            var script = new Script
-            {
-                Name = scriptName,
+                Name = body.Name.Trim(),
                 SqlScript = body.SqlScript,
-                RollbackScript = rollback,
-                BatchId = batch?.Id,
-                DeveloperId = developer.Id,
-                Status = ScriptStatus.Draft,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
+                RollbackScript = string.IsNullOrWhiteSpace(body.RollbackScript) ? null : body.RollbackScript,
+                DeveloperId = developerId,
+                ActorUserId = uid,
+                BatchId = body.BatchId
             };
-            _db.Scripts.Add(script);
-            await _db.SaveChangesAsync();
 
-            await _conflictSync.SyncAfterScriptSavedAsync(script.Id);
+            var result = await _mediator.Send(medReq);
+
+            if (!result.Success)
+                return BadRequest(new ApiMutationResponse { Success = false, Message = result.Message ?? "Kayıt başarısız." });
+
+            var batchDisplay = result.BatchName ?? "Atanmamış";
+            if (!string.IsNullOrEmpty(result.ReleaseVersion))
+                batchDisplay = $"{result.ReleaseVersion} — {batchDisplay}";
 
             return Json(new ApiMutationResponse
             {
                 Success = true,
-                Message = "Script oluşturuldu.",
-                ScriptId = script.Id,
-                BatchId = batch?.Id,
-                ScriptName = script.Name,
-                Status = script.Status.ToString(),
-                BatchName = batch?.Name ?? "Atanmamış",
-                DeveloperName = developer.Name,
-                HasRollback = !string.IsNullOrWhiteSpace(script.RollbackScript),
-                CreatedAtDisplay = script.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy"),
-                CanDelete = AuthHelper.CanDeleteScript(User, script.DeveloperId)
+                Message = result.Message ?? "Script oluşturuldu.",
+                ScriptId = result.ScriptId,
+                BatchId = result.BatchId,
+                ScriptName = medReq.Name,
+                Status = ScriptReadQueries.ScriptStatusDisplay(ScriptStatus.Draft),
+                BatchName = batchDisplay,
+                DeveloperName = result.DeveloperName ?? string.Empty,
+                HasRollback = !string.IsNullOrWhiteSpace(medReq.RollbackScript),
+                CreatedAtDisplay = DateTime.UtcNow.ToLocalTime().ToString("dd.MM.yyyy"),
+                CanDelete = AuthHelper.CanDeleteScript(User, developerId)
             });
         }
 
@@ -259,40 +215,21 @@ namespace ScriptManager.Controllers
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> Delete(long id)
         {
-            var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-
-            var script = await _db.Scripts.FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+            var script = await _db.Scripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
             if (script == null || script.Status == ScriptStatus.Deleted)
                 return NotFound(new { success = false, message = "Script bulunamadı." });
 
             if (!AuthHelper.CanDeleteScript(User, script.DeveloperId))
                 return Forbid();
 
-            var conflictRows = await _db.Conflicts
-                .Where(c => c.ScriptId == id || c.ConflictingScriptId == id)
-                .ToListAsync();
-            var recomputeIds = conflictRows.SelectMany(c => new[] { c.ScriptId, c.ConflictingScriptId }).Where(x => x != id).ToHashSet();
-            _db.Conflicts.RemoveRange(conflictRows);
+            var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
+            var result = await _mediator.Send(new DeleteScriptRequest { ScriptId = id, UserId = uid });
 
-            script.Status = ScriptStatus.Deleted;
-            script.UpdatedAt = DateTime.UtcNow;
-            _db.Scripts.Update(script);
+            if (!result.Success)
+                return NotFound(new { success = false, message = result.Message ?? "Script silinemedi." });
 
-            _db.Commits.Add(new Commit
-            {
-                ScriptId = script.Id,
-                UserId = uid,
-                Type = CommitType.Delete,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
-            });
-
-            await _db.SaveChangesAsync();
-
-            foreach (var oid in recomputeIds)
-                await _conflictSync.RecomputeScriptStatusAsync(oid);
-
-            return Json(new { success = true, message = "Script silindi." });
+            return Json(new { success = true, message = result.Message ?? "Script silindi." });
         }
     }
 }

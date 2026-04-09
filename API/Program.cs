@@ -30,14 +30,12 @@ builder.Services.AddDbContext<MyContext>(options =>
 
 builder.Services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
 builder.Services.AddScoped<IBatchRepository, BatchRepository>();
-builder.Services.AddScoped<ICommitRepository, CommitRepository>();
 builder.Services.AddScoped<IConflictRepository, ConflictRepository>();
 builder.Services.AddScoped<IReleaseRepository, ReleaseRepository>();
 builder.Services.AddScoped<IScriptRepository, ScriptRepository>();
 builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
-builder.Services.AddScoped<IScriptWorkflowService, ScriptWorkflowService>();
 
 // 🔥 JWT
 builder.Services.AddAuthentication("Bearer")

@@ -1,108 +1,90 @@
 using BLL.Services;
+using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
-using DAL.Repositories.Interfaces;
 using MediatR;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Features.Scripts.Commands
 {
     public class CreateScriptHandle : IRequestHandler<CreateScriptRequest, CreateScriptResponse>
     {
-        private readonly IRepository<Script> _scriptRepository;
-        private readonly IRepository<Batch> _batchRepository;
-        private readonly IRepository<Release> _releaseRepository;
-        private readonly IRepository<DAL.Entities.User> _userRepository;
-        private readonly IMediator _mediator;
+        private readonly MyContext _db;
         private readonly IScriptConflictSyncService _conflictSync;
 
-        public CreateScriptHandle(
-            IRepository<Script> scriptRepository,
-            IRepository<Batch> batchRepository,
-            IRepository<Release> releaseRepository,
-            IRepository<DAL.Entities.User> userRepository,
-            IMediator mediator,
-            IScriptConflictSyncService conflictSync)
+        public CreateScriptHandle(MyContext db, IScriptConflictSyncService conflictSync)
         {
-            _scriptRepository = scriptRepository;
-            _batchRepository = batchRepository;
-            _releaseRepository = releaseRepository;
-            _userRepository = userRepository;
-            _mediator = mediator;
+            _db = db;
             _conflictSync = conflictSync;
         }
 
         public async Task<CreateScriptResponse> Handle(CreateScriptRequest request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.Name))
-                return new CreateScriptResponse { Success = false, Message = "Script adı boş olamaz." };
+            long? finalBatchId = null;
+            string? batchNameOut = null;
+            long? releaseIdOut = null;
+            string? releaseNameOut = null;
+            string? versionOut = null;
 
-
-            if (string.IsNullOrWhiteSpace(request.SqlScript))
-                return new CreateScriptResponse { Success = false, Message = "SQL Script boş olamaz." };
-
-            var existingScript = await _scriptRepository.GetWhereAsync(x => x.Name == request.Name);
-            if (existingScript.Any())
-                return new CreateScriptResponse { Success = false, Message = "Bu isimde script zaten mevcut." };
-
-
-            Batch? batch = null;
-            if (request.BatchId.HasValue)
+            if (request.BatchId.HasValue && request.BatchId.Value > 0)
             {
-                batch = await _batchRepository.GetByIdAsync(request.BatchId.Value);
-                if (batch == null)
+                var bid = request.BatchId.Value;
+                var lb = await _db.Batches.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == bid && !b.IsDeleted, cancellationToken);
+                if (lb == null)
                     return new CreateScriptResponse { Success = false, Message = "Batch bulunamadı." };
+                if (lb.IsLocked)
+                    return new CreateScriptResponse { Success = false, Message = "Bu batch kilitli; script eklenemez." };
+                finalBatchId = bid;
+                batchNameOut = lb.Name;
+                if (lb.ReleaseId.HasValue)
+                {
+                    var lr = await _db.Releases.AsNoTracking()
+                        .FirstOrDefaultAsync(r => r.Id == lb.ReleaseId.Value && !r.IsDeleted, cancellationToken);
+                    if (lr != null)
+                    {
+                        releaseIdOut = lr.Id;
+                        releaseNameOut = lr.Name;
+                        versionOut = lr.Version;
+                    }
+                }
             }
-            else if (request.Batch != null)
+            else
             {
-                var existingBatch = await _batchRepository.GetWhereAsync(x => x.Name == request.Batch.Name);
-                if (existingBatch.Any())
-                {
-                    batch = existingBatch.First();
-                }
-                else
-                {
-
-                    var responseBatch = await _mediator.Send(request.Batch, cancellationToken);
-                    if (!responseBatch.Success)
-                        return new CreateScriptResponse { Success = false, Message = "Batch oluşturulamadı: " + responseBatch.Message };
-
-                    batch = await _batchRepository.GetByIdAsync(responseBatch.BatchId);
-                    if (batch == null)
-                        return new CreateScriptResponse { Success = false, Message = "Batch oluşturuldu ama bulunamadı." };
-                }
+                finalBatchId = null;
+                batchNameOut = "Atanmamış";
             }
 
-            var user = await _userRepository.GetByIdAsync(request.DeveloperId);
-            if (user == null)
-                return new CreateScriptResponse { Success = false, Message = "Developer bulunamadı." };
-
+            var dev = await _db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == request.DeveloperId && !u.IsDeleted, cancellationToken);
 
             var script = new Script
             {
-                Name = request.Name,
-                SqlScript = request.SqlScript,
+                Name = request.Name?.Trim() ?? string.Empty,
+                SqlScript = request.SqlScript ?? string.Empty,
                 RollbackScript = request.RollbackScript,
-                BatchId = batch?.Id,
-                DeveloperId = user.Id,
+                BatchId = finalBatchId,
+                DeveloperId = request.DeveloperId,
                 Status = ScriptStatus.Draft,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
             };
-
-            await _scriptRepository.AddAsync(script);
-            await _scriptRepository.SaveAsync();
+            _db.Scripts.Add(script);
+            await _db.SaveChangesAsync(cancellationToken);
 
             await _conflictSync.SyncAfterScriptSavedAsync(script.Id, cancellationToken);
 
             return new CreateScriptResponse
             {
                 Success = true,
-                Message = "Script başarıyla oluşturuldu.",
+                Message = "Script oluşturuldu.",
                 ScriptId = script.Id,
-                BatchId = batch?.Id
+                BatchId = finalBatchId,
+                ReleaseId = releaseIdOut,
+                ReleaseName = releaseNameOut,
+                ReleaseVersion = versionOut,
+                BatchName = batchNameOut,
+                DeveloperName = dev?.Name ?? string.Empty
             };
         }
     }

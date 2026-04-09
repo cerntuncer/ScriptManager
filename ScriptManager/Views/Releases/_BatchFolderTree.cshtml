@@ -1,0 +1,64 @@
+@model ScriptManager.Models.Release.ReleaseBatchFolderViewModel
+
+
+
+<details class="sm-tree-node sm-tree-batch sm-tree-folder border-start border-2 border-primary-subtle ps-2 mb-2" open>
+
+    <summary class="sm-tree-summary flex-wrap">
+
+        <span class="sm-tree-icon" aria-hidden="true">📁</span>
+
+        <span class="sm-tree-label">@Model.Name</span>
+
+        <span class="sm-tree-meta">@Model.Folders.Count alt · @Model.Scripts.Count script</span>
+
+    </summary>
+
+    <div class="sm-tree-children pt-1">
+
+        @foreach (var folder in Model.Folders)
+
+        {
+
+            <partial name="_BatchFolderTree" model="folder" />
+
+        }
+
+        @if (Model.Scripts.Count > 0)
+
+        {
+
+            <ul class="sm-tree-leaves list-unstyled mb-0 ps-2">
+
+                @foreach (var s in Model.Scripts)
+
+                {
+
+                    <li class="sm-tree-leaf py-1">
+
+                        <a class="sm-tree-leaf-link" href="@Url.Action("Detail", "Scripts", new { id = s.ScriptId })">
+
+                            <span class="sm-tree-icon sm-tree-icon-sm" aria-hidden="true">📄</span>
+
+                            <span class="sm-tree-leaf-name">@s.Name</span>
+
+                        </a>
+
+                        <span class="text-muted small">#@s.Order</span>
+                        @if (s.HasCacheBustHints)
+                        {
+                            <span class="badge text-bg-warning text-dark ms-1" title="@s.CacheBustSummary">cache</span>
+                        }
+
+                    </li>
+
+                }
+
+            </ul>
+
+        }
+
+    </div>
+
+</details>
+

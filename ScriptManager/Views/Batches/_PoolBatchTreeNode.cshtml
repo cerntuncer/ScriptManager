@@ -1,0 +1,52 @@
+@model ScriptManager.Models.Batch.PoolBatchTreeNodeDto
+@{
+    var canWrite = ViewBag.CanWrite as bool? == true;
+    var hasCh = Model.Children.Count > 0;
+}
+<li class="batch-tree-item mb-1" style="list-style: none;">
+    <div class="d-flex align-items-start gap-1">
+        @if (hasCh)
+        {
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 batch-tree-toggle"
+                    onclick="toggleBatchTreeBranch(this)" aria-expanded="false" title="Aç / kapat">+</button>
+        }
+        else
+        {
+            <span class="d-inline-block batch-tree-toggle-spacer" style="width: 2rem; flex-shrink: 0;"></span>
+        }
+        <div class="flex-grow-1 min-w-0">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="fw-medium">@Model.Name</span>
+                @if (Model.IsLocked)
+                {
+                    <span class="badge text-bg-secondary small">Kilitli</span>
+                }
+                @if (!string.IsNullOrEmpty(Model.LinkedReleaseVersion))
+                {
+                    <span class="badge text-bg-info text-dark small" title="Bu paket bir release'e bağlı">Release'lendi (@Model.LinkedReleaseVersion)</span>
+                }
+                @if (Model.CanPackageRelease)
+                {
+                    <span class="badge text-bg-success small">Release için hazır</span>
+                }
+                @if (canWrite && Model.CanAddChild)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openPoolChildBatchModal(@Model.BatchId)">Alt batch</button>
+                }
+                @if (canWrite && Model.CanAddScript)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openScriptCreateWizard({ poolBatchId: @Model.BatchId })">Script ekle</button>
+                }
+            </div>
+            @if (hasCh)
+            {
+                <ul class="list-unstyled border-start ps-3 mt-1 mb-0 batch-tree-children d-none">
+                    @foreach (var c in Model.Children)
+                    {
+                        <partial name="_PoolBatchTreeNode" model="c" />
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+</li>

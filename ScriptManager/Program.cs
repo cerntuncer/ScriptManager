@@ -1,6 +1,9 @@
 using BLL.Features.Releases.Commands;
 using BLL.Services;
 using DAL.Context;
+using DAL.Repositories.Base;
+using DAL.Repositories.Concretes;
+using DAL.Repositories.Interfaces;
 using MediatR;
 using DAL.Entities;
 using DAL.Enums;
@@ -16,8 +19,15 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<MyContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddScoped(typeof(IRepository<>), typeof(BaseRepository<>));
+builder.Services.AddScoped<IBatchRepository, BatchRepository>();
+builder.Services.AddScoped<IConflictRepository, ConflictRepository>();
+builder.Services.AddScoped<IReleaseRepository, ReleaseRepository>();
+builder.Services.AddScoped<IScriptRepository, ScriptRepository>();
+builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+
 builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
-builder.Services.AddScoped<IScriptWorkflowService, ScriptWorkflowService>();
 builder.Services.AddMediatR(typeof(CreateReleaseHandle).Assembly);
 
 var app = builder.Build();

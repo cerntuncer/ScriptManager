@@ -1,5 +1,8 @@
 using BLL.Features.Releases.Commands;
+using BLL.Features.Batchs.Commands;
 using DAL.Context;
+using DAL.Entities;
+using DAL.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +39,56 @@ namespace ScriptManager.Controllers
             return View(vm);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> OrphanRootBatches()
+        {
+            var roots = await _db.Batches.AsNoTracking()
+                .Where(b => !b.IsDeleted && b.ReleaseId == null && b.ParentBatchId == null)
+                .OrderBy(b => b.Name)
+                .Select(b => new { id = b.Id, name = b.Name })
+                .ToListAsync();
+            return Json(new { roots });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> CreateOrphanRoot([FromBody] CreateOrphanRootFormRequest? body)
+        {
+            if (!AuthHelper.CanWriteOperational(User))
+                return Forbid();
+            if (body == null || string.IsNullOrWhiteSpace(body.Name))
+                return BadRequest(new { success = false, message = "Klasör adı zorunludur." });
+
+            var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
+            var createdBy = body.CreatedBy;
+            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
+                createdBy = uid;
+            else if (createdBy <= 0)
+                return BadRequest(new { success = false, message = "Oluşturan kullanıcıyı seçin." });
+
+            var name = body.Name.Trim();
+            var userExists = await _db.Users.AsNoTracking().AnyAsync(u => u.Id == createdBy);
+            if (!userExists)
+                return BadRequest(new { success = false, message = "Geçersiz kullanıcı." });
+
+            var exists = await BatchTreeHelper.SiblingNameExistsAsync(_db, null, null, name);
+            if (exists)
+                return BadRequest(new { success = false, message = "Bu isimde yetim kök klasör zaten var." });
+
+            var root = new Batch
+            {
+                Name = name,
+                ParentBatchId = null,
+                ReleaseId = null,
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
+            };
+            _db.Batches.Add(root);
+            await _db.SaveChangesAsync();
+            return Json(new { success = true, message = "Yetim kök klasör oluşturuldu.", batchId = root.Id });
+        }
+
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> AddFolder([FromBody] AddFolderFormRequest? body)
@@ -43,8 +96,8 @@ namespace ScriptManager.Controllers
             if (!AuthHelper.CanWriteOperational(User))
                 return Forbid();
 
-            if (body == null || string.IsNullOrWhiteSpace(body.Name))
-                return BadRequest(CreateReleaseBatchResponse.Fail("Ad zorunludur."));
+            if (body == null || body.ParentBatchId <= 0 || string.IsNullOrWhiteSpace(body.Name))
+                return BadRequest(new { success = false, message = "Üst klasör ve ad zorunludur." });
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
 
@@ -52,20 +105,52 @@ namespace ScriptManager.Controllers
             if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
                 createdBy = uid;
             else if (createdBy <= 0)
-                return BadRequest(CreateReleaseBatchResponse.Fail("Oluşturan zorunludur."));
+                return BadRequest(new { success = false, message = "Oluşturan zorunludur." });
 
-            var result = await _mediator.Send(new CreateReleaseBatchRequest
+            var parent = await _db.Batches.FirstOrDefaultAsync(b => b.Id == body.ParentBatchId && !b.IsDeleted);
+            if (parent == null)
+                return BadRequest(new { success = false, message = "Üst klasör bulunamadı." });
+
+            var name = body.Name.Trim();
+            var exists = await BatchTreeHelper.SiblingNameExistsAsync(_db, parent.Id, parent.ReleaseId, name);
+            if (exists)
+                return BadRequest(new { success = false, message = "Bu klasörde aynı isimde alt klasör var." });
+
+            var batch = new Batch
             {
-                ParentBatchId = body.ParentBatchId,
+                ParentBatchId = parent.Id,
+                ReleaseId = parent.ReleaseId,
+                Name = name,
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
+            };
+            _db.Batches.Add(batch);
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Alt klasör oluşturuldu.", batchId = batch.Id, batchName = batch.Name });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SetTreeLock([FromBody] SetReleaseTreeLockFormRequest? body)
+        {
+            if (!AuthHelper.CanWriteOperational(User))
+                return Forbid();
+
+            if (body == null || body.ReleaseId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            var res = await _mediator.Send(new SetReleaseTreeLockRequest
+            {
                 ReleaseId = body.ReleaseId,
-                Name = body.Name.Trim(),
-                CreatedBy = createdBy
+                Lock = body.Lock
             });
 
-            if (!result.Success)
-                return BadRequest(result);
+            if (!res.Success)
+                return BadRequest(new { success = false, message = res.Message });
 
-            return Json(result);
+            return Json(new { success = true, message = res.Message });
         }
 
         [HttpPost]
@@ -76,7 +161,7 @@ namespace ScriptManager.Controllers
                 return Forbid();
 
             if (body == null)
-                return BadRequest(CreateReleaseResponse.Fail("Geçersiz istek gövdesi."));
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Geçersiz istek gövdesi." });
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
 
@@ -84,69 +169,106 @@ namespace ScriptManager.Controllers
             if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
                 createdBy = uid;
             else if (createdBy <= 0)
-                return BadRequest(CreateReleaseResponse.Fail("Oluşturan kullanıcıyı seçin."));
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Oluşturan kullanıcıyı seçin." });
 
-            long? restrictDev = null;
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-                restrictDev = uid;
+            if (string.IsNullOrWhiteSpace(body.Name))
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Release adı girin." });
+            if (string.IsNullOrWhiteSpace(body.Version))
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Versiyon girin." });
 
-            var result = await _mediator.Send(new CreateReleaseRequest
+            if (await _db.Releases.AnyAsync(r => !r.IsDeleted && r.Version == body.Version))
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Bu versiyon zaten kullanılıyor." });
+
+            var rootMode = (body.RootMode ?? "new").Trim().ToLowerInvariant();
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
             {
-                Name = body.Name,
-                Version = body.Version,
-                CreatedBy = createdBy,
-                InitialBatchName = body.InitialBatchName,
-                SelectedScriptIds = body.SelectedScriptIds,
-                RootScriptIds = body.RootScriptIds,
-                Folders = body.Folders,
-                RestrictScriptAssignmentToDeveloperId = restrictDev
-            });
+                var release = new DAL.Entities.Release
+                {
+                    Name = body.Name.Trim(),
+                    Version = body.Version.Trim(),
+                    CreatedBy = createdBy,
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false,
+                    IsActive = true
+                };
+                _db.Releases.Add(release);
+                await _db.SaveChangesAsync();
 
-            if (!result.Success)
-                return BadRequest(result);
+                if (rootMode == "existing")
+                {
+                    var rootId = body.ExistingRootBatchId ?? 0;
+                    if (rootId <= 0)
+                        return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Mevcut kök klasör seçin." });
+                    if (!await BatchTreeHelper.IsOrphanRootAsync(_db, rootId))
+                        return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Seçilen kayıt kök yetim klasör değil." });
+                    if (!await BatchTreeHelper.EntireSubtreeIsOrphanAsync(_db, rootId))
+                        return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Seçilen ağaç başka release'e bağlı." });
 
-            return Json(result);
-        }
+                    await BatchTreeHelper.PropagateReleaseIdAsync(_db, rootId, release.Id);
+                    release.RootBatchId = rootId;
+                }
+                else
+                {
+                    var rootName = (body.NewRootBatchName ?? string.Empty).Trim();
+                    if (string.IsNullOrWhiteSpace(rootName))
+                        return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Yeni kök klasör adı girin." });
+                    if (await BatchTreeHelper.SiblingNameExistsAsync(_db, null, release.Id, rootName))
+                        return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Bu isimde kök klasör zaten var." });
 
-        /// <summary>Başka batch'teki scripti bu release içindeki bir hedef batch'e taşır.</summary>
-        [HttpPost]
-        [IgnoreAntiforgeryToken]
-        public async Task<IActionResult> AssignScriptToBatch([FromBody] AssignScriptToBatchFormRequest? body)
-        {
-            if (!AuthHelper.CanWriteOperational(User))
-                return Forbid();
+                    var root = new Batch
+                    {
+                        Name = rootName,
+                        ParentBatchId = null,
+                        ReleaseId = release.Id,
+                        CreatedBy = createdBy,
+                        CreatedAt = DateTime.UtcNow,
+                        IsDeleted = false
+                    };
+                    _db.Batches.Add(root);
+                    await _db.SaveChangesAsync();
+                    release.RootBatchId = root.Id;
+                }
 
-            if (body == null || body.ReleaseId <= 0 || body.ScriptId <= 0 || body.TargetBatchId <= 0)
-                return BadRequest(new { success = false, message = "Release, script ve hedef klasör zorunludur." });
+                _db.Releases.Update(release);
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
 
-            var release = await _db.Releases.AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == body.ReleaseId && !r.IsDeleted);
-            if (release == null)
-                return BadRequest(new { success = false, message = "Release bulunamadı." });
+                var batchIds = await _db.Batches.AsNoTracking()
+                    .Where(b => !b.IsDeleted && b.ReleaseId == release.Id)
+                    .Select(b => b.Id)
+                    .ToListAsync();
+                var scriptCount = batchIds.Count == 0
+                    ? 0
+                    : await _db.Scripts.CountAsync(s => !s.IsDeleted && s.Status != ScriptStatus.Deleted && s.BatchId.HasValue && batchIds.Contains(s.BatchId.Value));
+                var rbCount = batchIds.Count == 0
+                    ? 0
+                    : await _db.Scripts.CountAsync(s => !s.IsDeleted && s.Status != ScriptStatus.Deleted && s.BatchId.HasValue && batchIds.Contains(s.BatchId.Value) && !string.IsNullOrWhiteSpace(s.RollbackScript));
 
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-            {
-                var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-                var owns = await _db.Scripts.AsNoTracking()
-                    .AnyAsync(s => s.Id == body.ScriptId && s.DeveloperId == uid);
-                if (!owns)
-                    return Forbid();
+                return Json(new CreateReleaseJsonResponse
+                {
+                    Success = true,
+                    Message = "Release oluşturuldu.",
+                    ReleaseId = release.Id,
+                    Version = release.Version,
+                    CreatedAtDisplay = release.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                    ScriptCount = scriptCount,
+                    RollbackScriptCount = rbCount,
+                    RootBatchId = release.RootBatchId
+                });
             }
-
-            var assignRes = await _mediator.Send(new MoveScriptToReleaseBatchRequest
+            catch
             {
-                ReleaseId = body.ReleaseId,
-                ScriptId = body.ScriptId,
-                TargetBatchId = body.TargetBatchId
-            });
-            if (!assignRes.Success)
-                return BadRequest(new { success = false, message = assignRes.Message ?? "Taşıma başarısız." });
-
-            return Json(assignRes);
+                await tx.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<IActionResult> Detail(long id)
         {
+            if (id <= 0)
+                return RedirectToAction("Index");
+
             var detail = await ReleaseReadQueries.GetReleaseDetailAsync(_db, id);
             if (detail == null || !detail.Success)
                 return NotFound();
@@ -163,6 +285,9 @@ namespace ScriptManager.Controllers
         [HttpGet]
         public async Task<IActionResult> DetailRefresh(long id)
         {
+            if (id <= 0)
+                return NotFound();
+
             var detail = await ReleaseReadQueries.GetReleaseDetailAsync(_db, id);
             if (detail == null || !detail.Success)
                 return NotFound();
@@ -185,6 +310,8 @@ namespace ScriptManager.Controllers
             var detail = await ReleaseReadQueries.GetReleaseDetailAsync(_db, body.ReleaseId);
             if (detail == null || !detail.Success)
                 return NotFound();
+            if (detail.IsCancelled)
+                return BadRequest("İptal edilmiş sürüm.");
 
             var requested = (body.ScriptIds ?? []).Where(id => id > 0).Distinct().ToList();
             if (requested.Count == 0)
@@ -209,9 +336,10 @@ namespace ScriptManager.Controllers
             return File(bytes, "application/sql", $"{safeVersion}-selected.sql");
         }
 
+        /// <summary>Toplu iptal; sürüm silinmez, paketler havuza döner.</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
-        public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteReleasesRequest? body)
+        public async Task<IActionResult> BulkCancel([FromBody] CancelReleaseFormRequest? body)
         {
             if (!AuthHelper.CanDeleteRelease(User))
                 return Forbid();
@@ -220,20 +348,21 @@ namespace ScriptManager.Controllers
             if (ids.Count == 0)
                 return BadRequest(new { success = false, message = "Sürüm seçilmedi." });
 
-            var actor = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var bulkRes = await _mediator.Send(new DeleteReleasesRequest
+            var res = await _mediator.Send(new CancelReleaseRequest { ReleaseIds = ids });
+            return Json(new
             {
-                ReleaseIds = ids,
-                ActorUserId = actor
+                success = res.Success,
+                message = res.Message,
+                requestedCount = res.RequestedCount,
+                cancelledCount = res.CancelledCount,
+                failedReleaseIds = res.FailedReleaseIds
             });
-
-            return Json(bulkRes);
         }
 
-        /// <summary>Tekil sürüm silme (cascade); yönetici.</summary>
+        /// <summary>Tekil iptal; paketler havuza döner ve kilidi açılır.</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
-        public async Task<IActionResult> DeleteOne([FromBody] ReleaseDeleteBody? body)
+        public async Task<IActionResult> CancelOne([FromBody] CancelReleaseFormRequest? body)
         {
             if (!AuthHelper.CanDeleteRelease(User))
                 return Forbid();
@@ -241,16 +370,11 @@ namespace ScriptManager.Controllers
             if (body == null || body.ReleaseId <= 0)
                 return BadRequest(new { success = false, message = "Geçersiz sürüm." });
 
-            var actor = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var delRes = await _mediator.Send(new DeleteReleaseRequest
-            {
-                ReleaseId = body.ReleaseId,
-                ActorUserId = actor
-            });
-            if (!delRes.Success)
-                return NotFound(new { success = false, message = delRes.Message });
+            var res = await _mediator.Send(new CancelReleaseRequest { ReleaseId = body.ReleaseId });
+            if (!res.Success)
+                return BadRequest(new { success = false, message = res.Message });
 
-            return Json(delRes);
+            return Json(new { success = true, message = res.Message });
         }
     }
 }

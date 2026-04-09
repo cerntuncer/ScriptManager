@@ -1,4 +1,4 @@
-﻿using DAL.Entities;
+using DAL.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,5 +11,9 @@ namespace DAL.Repositories.Interfaces
     {
         Task<List<Batch>> GetWithScriptsAsync();
         Task<Batch?> GetWithScriptsByIdAsync(long id);
+        Task<Batch?> GetActiveByIdAsync(long id, CancellationToken cancellationToken);
+        Task<bool> ExistsInScopeByNameAsync(long? parentBatchId, long? releaseId, string name,
+            CancellationToken cancellationToken);
+        Task<HashSet<long>> GetAllowedIdsForReleaseAsync(long releaseId, long? rootBatchId, CancellationToken cancellationToken);
     }
 }

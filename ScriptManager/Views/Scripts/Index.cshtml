@@ -8,7 +8,7 @@
 <div class="page-head">
     <div>
         <h1 class="page-title">Scripts</h1>
-        <p class="page-sub text-muted mb-0 small">Burada yalnızca script kaydı oluşturulur (batch seçilmez). Bir sürüme eklenebilmesi için scriptin <strong>Hazır</strong> durumunda olması gerekir (detaydan akış). Release için <a href="@Url.Action("Index", "Releases")">Releases</a>.</p>
+        <p class="page-sub text-muted mb-0 small">Klasör yapısı <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a> üzerinden kurulur; script eklerken seçtiğin klasöre doğrudan eklenir. Release için <a href="@Url.Action("Index", "Releases")">Releases</a>.</p>
     </div>
     @if (canAuthor)
     {
@@ -36,7 +36,6 @@
                     <th>Batch</th>
                     <th>Geliştirici</th>
                     <th>Rollback</th>
-                    <th>Önbellek</th>
                     <th>Tarih</th>
                     <th></th>
                 </tr>
@@ -50,16 +49,6 @@
                         <td>@item.BatchName</td>
                         <td>@item.DeveloperName</td>
                         <td>@(item.HasRollback ? "Var" : "—")</td>
-                        <td>
-                            @if (item.HasCacheBustHints)
-                            {
-                                <span class="badge text-bg-warning text-dark" title="@item.CacheBustSummary">Uyarı</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">—</span>
-                            }
-                        </td>
                         <td>@item.CreatedAt.ToString("dd.MM.yyyy")</td>
                         <td class="text-nowrap">
                             <a class="btn btn-sm btn-table" href="@Url.Action("Detail", "Scripts", new { id = item.ScriptId })">Detay</a>
@@ -79,9 +68,17 @@
 @section Scripts {
     <script>
         window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            createWizardContext = Url.Action("CreateWizardContext", "Scripts"),
+            create = Url.Action("Create", "Scripts"),
+            batchesIndex = Url.Action("Index", "Batches"),
             developerOptions = Url.Action("DeveloperOptions", "Scripts"),
+            addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
+            treeChildren = Url.Action("TreeChildren", "Batches"),
+            batchPath = Url.Action("BatchPath", "Batches"),
+            detailUrlPlaceholder = Url.Action("Detail", "Scripts", new { id = 999999999L }),
             deleteUrlPlaceholder = Url.Action("Delete", "Scripts", new { id = 999999999L })
         }));
+        window.__scriptCreateUrls = window.__scriptsPageUrls;
         setupTableFilter("scriptFilterInput", "#scriptTable tbody tr");
     </script>
 }

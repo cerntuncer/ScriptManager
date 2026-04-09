@@ -29,7 +29,7 @@ public class GetUnresolvedConflictsHandle : IRequestHandler<GetUnresolvedConflic
                 ConflictingScriptName = bName,
                 DetectedAt = c.DetectedAt,
                 WarningMessage =
-                    $"\"{c.TableName}\" tablosu \"{aName}\" (Id:{c.ScriptId}) ve \"{bName}\" (Id:{c.ConflictingScriptId}) scriptlerinde geçiyor; çakışma olabilir, scriptleri kontrol edin."
+                    $"Aynı kayıt ({c.TableName}) üzerinde \"{aName}\" (Id:{c.ScriptId}) ve \"{bName}\" (Id:{c.ConflictingScriptId}) scriptleri etki ediyor olabilir; lütfen kontrol edin."
             };
         }).ToList();
 

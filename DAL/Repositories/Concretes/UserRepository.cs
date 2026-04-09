@@ -32,7 +32,6 @@ namespace DAL.Repositories.Concretes
         {
             return await _context.Users
                 .Include(x => x.Scripts)
-                .Include(x => x.Commits)
                 .Include(x => x.ResolvedConflicts)
                 .FirstOrDefaultAsync(x => x.Id == id);
         }

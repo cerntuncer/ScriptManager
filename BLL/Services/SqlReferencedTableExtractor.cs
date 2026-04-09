@@ -41,6 +41,30 @@ public static class SqlReferencedTableExtractor
         return set;
     }
 
+    public static HashSet<string> ExtractRecordIds(string? sql)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(sql)) return set;
+
+        foreach (Match m in Regex.Matches(sql, @"(?i)\bID\s*=\s*(?<id>\d+)\b"))
+        {
+            if (!m.Groups["id"].Success) continue;
+            set.Add($"ID:{m.Groups["id"].Value}");
+        }
+
+        foreach (Match m in Regex.Matches(sql, @"(?i)\bID\s+IN\s*\((?<ids>[0-9,\s]+)\)"))
+        {
+            if (!m.Groups["ids"].Success) continue;
+            foreach (var raw in m.Groups["ids"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (int.TryParse(raw, out var parsed))
+                    set.Add($"ID:{parsed}");
+            }
+        }
+
+        return set;
+    }
+
     private static string NormalizeTableName(string raw)
     {
         var s = raw.Trim();

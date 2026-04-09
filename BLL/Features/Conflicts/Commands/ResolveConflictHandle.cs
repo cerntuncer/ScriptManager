@@ -8,16 +8,13 @@ namespace BLL.Features.Conflicts.Commands;
 public class ResolveConflictHandle : IRequestHandler<ResolveConflictRequest, ResolveConflictResponse>
 {
     private readonly IRepository<Conflict> _conflictRepository;
-    private readonly IRepository<DAL.Entities.User> _userRepository;
     private readonly IScriptConflictSyncService _conflictSync;
 
     public ResolveConflictHandle(
         IRepository<Conflict> conflictRepository,
-        IRepository<DAL.Entities.User> userRepository,
         IScriptConflictSyncService conflictSync)
     {
         _conflictRepository = conflictRepository;
-        _userRepository = userRepository;
         _conflictSync = conflictSync;
     }
 
@@ -30,11 +27,7 @@ public class ResolveConflictHandle : IRequestHandler<ResolveConflictRequest, Res
         if (row.ResolvedAt != null)
             return new ResolveConflictResponse { Success = false, Message = "Bu çakışma zaten çözümlenmiş." };
 
-        var user = await _userRepository.GetByIdAsync(request.UserId);
-        if (user == null)
-            return new ResolveConflictResponse { Success = false, Message = "Geçersiz kullanıcı." };
-
-        row.ResolvedBy = user.Id;
+        row.ResolvedBy = request.UserId;
         row.ResolvedAt = DateTime.UtcNow;
         _conflictRepository.Update(row);
         await _conflictRepository.SaveAsync();

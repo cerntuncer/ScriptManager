@@ -1,4 +1,4 @@
-﻿using DAL.Entities;
+using DAL.Entities;
 using DAL.Enums;
 using DAL.Repositories.Interfaces;
 using MediatR;
@@ -28,7 +28,7 @@ namespace BLL.Features.Batchs.Queries
             GetBatchByIdRequest request,
             CancellationToken cancellationToken)
         {
-            var batch = await _batchRepository.GetByIdAsync(request.BatchId);
+            var batch = await _batchRepository.GetFirstAsync(b => b.Id == request.BatchId && !b.IsDeleted);
 
             if (batch == null)
             {
@@ -39,7 +39,7 @@ namespace BLL.Features.Batchs.Queries
                 };
             }
 
-            // 🔥 Batch içindeki scriptler
+          
             var scripts = await _scriptRepository
                 .GetWhereAsync(x => x.BatchId == batch.Id && x.Status != ScriptStatus.Deleted);
 

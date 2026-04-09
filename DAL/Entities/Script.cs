@@ -20,7 +20,5 @@ namespace DAL.Entities
         public string? RollbackScript { get; set; }
         public Batch? Batch { get; set; }
         public User Developer { get; set; } = null!;
-        public ICollection<Commit> Commits { get; set; } = new List<Commit>();
-
     }
 }

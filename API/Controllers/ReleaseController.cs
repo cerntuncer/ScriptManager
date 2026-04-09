@@ -1,4 +1,4 @@
-﻿using BLL.Features.Releases.Commands;
+using BLL.Features.Releases.Commands;
 using BLL.Features.Releases.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/releases")]
     public class ReleaseController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -17,32 +17,29 @@ namespace API.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(CreateReleaseApiRequest request)
+        public async Task<IActionResult> Create([FromBody] CreateReleaseRequest request)
         {
             var result = await _mediator.Send(request);
 
             if (!result.Success)
                 return BadRequest(result);
 
-            return Ok(result);
+            return CreatedAtAction(nameof(GetById), new { id = result.ReleaseId }, result);
         }
 
-        [HttpPut]
-        public async Task<IActionResult> Update(UpdateReleaseRequest request)
+        /// <summary>Sürüm güncelleme API'de desteklenmez.</summary>
+        [HttpPut("{id:long}")]
+        public IActionResult Update(long id) =>
+            BadRequest(new { message = "Release güncelleme kaldırıldı; web arayüzünden yönetin." });
+
+        /// <summary>Sürüm silinmez; iptal endpoint'ini kullanın.</summary>
+        [HttpPost("{id:long}/cancel")]
+        public async Task<IActionResult> Cancel(long id)
         {
-            var result = await _mediator.Send(request);
+            if (id <= 0)
+                return BadRequest(new { message = "Geçersiz release id." });
 
-            if (!result.Success)
-                return BadRequest(result);
-
-            return Ok(result);
-        }
-
-        [HttpDelete]
-        public async Task<IActionResult> Delete(DeleteReleaseApiRequest request)
-        {
-            var result = await _mediator.Send(request);
-
+            var result = await _mediator.Send(new CancelReleaseRequest { ReleaseId = id });
             if (!result.Success)
                 return BadRequest(result);
 
@@ -56,9 +53,12 @@ namespace API.Controllers
             return Ok(result);
         }
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> Detail(long id)
+        [HttpGet("{id:long}")]
+        public async Task<IActionResult> GetById(long id)
         {
+            if (id <= 0)
+                return BadRequest(new { message = "Geçersiz release id." });
+
             var result = await _mediator.Send(new GetReleaseByIdRequest
             {
                 ReleaseId = id

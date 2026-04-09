@@ -28,6 +28,11 @@
         <span>Scripts</span>
     </a>
 
+    <a class="nav-link-item @(currentController == "Batches" ? "active" : "")"
+       href="@Url.Action("Index", "Batches")">
+        <span>Klasör Ağacı</span>
+    </a>
+
     <a class="nav-link-item @(currentController == "Conflicts" ? "active" : "")"
        href="@Url.Action("Index", "Conflicts")">
         <span>Conflicts</span>

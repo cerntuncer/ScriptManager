@@ -1,25 +1,20 @@
-﻿using BLL.Common;
-using DAL.Entities;
-using System;
+using BLL.Common;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace BLL.Features.Batchs.Queries
 {
     public class GetBatchByIdResponse : BaseResponse
     {
         public long BatchId { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
-        public List<BatchScriptDto> Scripts { get; set; }
+        public List<BatchScriptDto> Scripts { get; set; } = new();
     }
 
     public class BatchScriptDto
     {
         public long ScriptId { get; set; }
-        public string Name { get; set; }
-        public string Status { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
     }
 }
