@@ -15,19 +15,22 @@ namespace BLL.Features.Scripts.Commands
         private readonly IRepository<Batch> _batchRepository;
         private readonly IMediator _mediator;
         private readonly IScriptConflictSyncService _conflictSync;
+        private readonly ISqlScriptSyntaxValidator _sqlSyntax;
 
         public UpdateScriptHandle(
             MyContext db,
             IRepository<Script> scriptRepository,
             IRepository<Batch> batchRepository,
             IMediator mediator,
-            IScriptConflictSyncService conflictSync)
+            IScriptConflictSyncService conflictSync,
+            ISqlScriptSyntaxValidator sqlSyntax)
         {
             _db = db;
             _scriptRepository = scriptRepository;
             _batchRepository = batchRepository;
             _mediator = mediator;
             _conflictSync = conflictSync;
+            _sqlSyntax = sqlSyntax;
         }
 
         public async Task<UpdateScriptResponse> Handle(UpdateScriptRequest request, CancellationToken cancellationToken)
@@ -35,6 +38,33 @@ namespace BLL.Features.Scripts.Commands
             var script = await _scriptRepository.GetByIdAsync(request.ScriptId);
             if (script == null)
                 return new UpdateScriptResponse { Success = false, Message = "Script bulunamadı." };
+
+            if (request.SqlScript != null || request.RollbackScript != null)
+            {
+                var syntaxIssues = new List<SqlScriptSyntaxIssue>();
+                if (request.SqlScript != null)
+                {
+                    var sqlR = _sqlSyntax.Validate(request.SqlScript, "SQL");
+                    if (!sqlR.IsValid)
+                        syntaxIssues.AddRange(sqlR.Issues);
+                }
+
+                if (request.RollbackScript != null)
+                {
+                    var rbR = _sqlSyntax.Validate(request.RollbackScript, "Rollback");
+                    if (!rbR.IsValid)
+                        syntaxIssues.AddRange(rbR.Issues);
+                }
+
+                if (syntaxIssues.Count > 0)
+                {
+                    return new UpdateScriptResponse
+                    {
+                        Success = false,
+                        Message = "T-SQL sözdizimi hataları:\n" + SqlScriptSyntaxValidator.FormatIssueList(syntaxIssues)
+                    };
+                }
+            }
 
             var hasContent = request.Name != null || request.SqlScript != null || request.RollbackScript != null
                 || request.BatchId.HasValue || request.Batch != null;

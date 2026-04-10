@@ -723,9 +723,11 @@ async function openScriptCreateWizard(preset) {
             <div class="col-md-12"><label class="form-label">Geliştirici</label><select id="createDeveloperId" class="form-select">${devOpts}</select></div>
             <div class="col-md-12"><label class="form-label">SQL script</label><textarea id="sqlScript" class="form-control font-monospace" rows="8" placeholder="CREATE / ALTER ..."></textarea></div>
             <div class="col-md-12"><label class="form-label">Rollback (isteğe bağlı)</label><textarea id="rollbackScript" class="form-control font-monospace" rows="4"></textarea></div>
-            <div class="col-12 d-flex justify-content-end gap-2 mt-3">
+            <div id="swSqlValidateBox" class="col-12 alert d-none small mb-0" role="status"></div>
+            <div class="col-12 d-flex justify-content-end flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-outline-secondary" onclick="validateScriptWizardSql()">SQL kontrol et</button>
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
-                <button type="button" class="btn btn-primary" onclick="submitCreateScript()">Oluştur</button>
+                <button type="button" id="swCreateScriptBtn" class="btn btn-primary" onclick="submitCreateScript()">Oluştur</button>
             </div>
         </form>`;
 
@@ -1046,6 +1048,80 @@ function downloadTextFile(filename, text) {
     URL.revokeObjectURL(a.href);
 }
 
+function renderSwSqlValidateBox(data) {
+    const box = document.getElementById("swSqlValidateBox");
+    const btn = document.getElementById("swCreateScriptBtn");
+    if (!box) return;
+    if (!data || data.success === false) {
+        box.className = "col-12 alert alert-danger small mb-0";
+        box.classList.remove("d-none");
+        box.innerHTML = escapeHtml(data?.message || "Doğrulama hatası.");
+        if (btn) btn.disabled = true;
+        return;
+    }
+    if (data.isValid) {
+        box.className = "col-12 alert alert-success small mb-0";
+        box.classList.remove("d-none");
+        box.textContent = "T-SQL sözdizimi uygun.";
+        if (btn) btn.disabled = false;
+        return;
+    }
+    box.className = "col-12 alert alert-danger small mb-0";
+    box.classList.remove("d-none");
+    const items = (data.issues || []).map(
+        (i) =>
+            `${i.source} batch ${i.batchNumber}, satır ${i.line}, sütun ${i.column}: ${i.message}`
+    );
+    box.innerHTML =
+        "<strong>Sözdizimi hataları:</strong><ul class='mb-0 mt-1 small'>" +
+        items.map((t) => `<li>${escapeHtml(t)}</li>`).join("") +
+        "</ul>";
+    if (btn) btn.disabled = true;
+}
+
+/** @returns {Promise<boolean>} */
+async function fetchValidateSqlAndRenderBox() {
+    const urls = window.__scriptCreateUrls || window.__scriptsPageUrls;
+    const url = urls?.validateSql;
+    if (!url) {
+        renderSwSqlValidateBox({ success: false, message: "Doğrulama adresi tanımlı değil." });
+        return false;
+    }
+    const sqlScript = document.getElementById("sqlScript")?.value ?? "";
+    const rollbackScript = document.getElementById("rollbackScript")?.value ?? "";
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ sqlScript, rollbackScript })
+        });
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            renderSwSqlValidateBox({ success: false, message: "Sunucu yanıtı okunamadı." });
+            return false;
+        }
+        if (!res.ok) {
+            renderSwSqlValidateBox({
+                success: false,
+                message: data?.message || `HTTP ${res.status}`
+            });
+            return false;
+        }
+        renderSwSqlValidateBox(data);
+        return !!(data.success && data.isValid);
+    } catch {
+        renderSwSqlValidateBox({ success: false, message: "Doğrulama isteği gönderilemedi." });
+        return false;
+    }
+}
+
+async function validateScriptWizardSql() {
+    const ok = await fetchValidateSqlAndRenderBox();
+    if (ok) showToast("T-SQL sözdizimi uygun.", "success");
+}
+
 function buildScriptWizardPayload() {
     const name = document.getElementById("scriptName")?.value?.trim();
     const sqlScript = document.getElementById("sqlScript")?.value ?? "";
@@ -1092,6 +1168,11 @@ async function submitCreateScript() {
     if (document.getElementById("createScriptWizardForm")) {
         payload = buildScriptWizardPayload();
         if (!payload) return;
+        const sqlOk = await fetchValidateSqlAndRenderBox();
+        if (!sqlOk) {
+            showToast("SQL sözdizimi hatalı; önce düzeltin.", "error");
+            return;
+        }
     } else {
         const fromSelect = document.getElementById("scriptTargetBatchId");
         let batchId = null;

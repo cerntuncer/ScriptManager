@@ -7,6 +7,8 @@ using DAL.Repositories.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -36,6 +38,8 @@ builder.Services.AddScoped<IScriptRepository, ScriptRepository>();
 builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
+builder.Services.AddSingleton<ISqlScriptSyntaxValidator>(_ =>
+    new SqlScriptSyntaxValidator(_.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection")));
 
 // 🔥 JWT
 builder.Services.AddAuthentication("Bearer")

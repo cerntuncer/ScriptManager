@@ -1,4 +1,5 @@
 using BLL.Features.Scripts.Commands;
+using BLL.Services;
 using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
@@ -15,11 +16,40 @@ namespace ScriptManager.Controllers
     {
         private readonly MyContext _db;
         private readonly IMediator _mediator;
+        private readonly ISqlScriptSyntaxValidator _sqlSyntax;
 
-        public ScriptsController(MyContext db, IMediator mediator)
+        public ScriptsController(MyContext db, IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax)
         {
             _db = db;
             _mediator = mediator;
+            _sqlSyntax = sqlSyntax;
+        }
+
+        /// <summary>SQL Server NOEXEC + ScriptDom + heuristik ile T-SQL kontrolü (kaydetmeden).</summary>
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public IActionResult ValidateSql([FromBody] SqlSyntaxValidationRequest? body)
+        {
+            if (body == null)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            var issues = new List<SqlScriptSyntaxIssue>();
+            issues.AddRange(_sqlSyntax.Validate(body.SqlScript, "SQL").Issues);
+            issues.AddRange(_sqlSyntax.Validate(body.RollbackScript, "Rollback").Issues);
+
+            return Json(new
+            {
+                success = true,
+                isValid = issues.Count == 0,
+                issues = issues.Select(i => new
+                {
+                    source = i.Source,
+                    batchNumber = i.BatchNumber,
+                    line = i.Line,
+                    column = i.Column,
+                    message = i.Message
+                })
+            });
         }
 
         public async Task<IActionResult> Index()

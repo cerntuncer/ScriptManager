@@ -1,6 +1,7 @@
 using BLL.Features.Scripts.Commands;
 using BLL.Features.Scripts.Queries;
 using BLL.Features.Users.Queries;
+using BLL.Services;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,10 +12,37 @@ namespace API.Controllers
     public class ScriptController : ControllerBase
     {
         private readonly IMediator _mediator;
+        private readonly ISqlScriptSyntaxValidator _sqlSyntax;
 
-        public ScriptController(IMediator mediator)
+        public ScriptController(IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax)
         {
             _mediator = mediator;
+            _sqlSyntax = sqlSyntax;
+        }
+
+        [HttpPost("validate-sql")]
+        public IActionResult ValidateSql([FromBody] SqlSyntaxValidationRequest? body)
+        {
+            if (body == null)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            var issues = new List<SqlScriptSyntaxIssue>();
+            issues.AddRange(_sqlSyntax.Validate(body.SqlScript, "SQL").Issues);
+            issues.AddRange(_sqlSyntax.Validate(body.RollbackScript, "Rollback").Issues);
+
+            return Ok(new
+            {
+                success = true,
+                isValid = issues.Count == 0,
+                issues = issues.Select(i => new
+                {
+                    source = i.Source,
+                    batchNumber = i.BatchNumber,
+                    line = i.Line,
+                    column = i.Column,
+                    message = i.Message
+                })
+            });
         }
 
         [HttpPost]

@@ -70,6 +70,7 @@
         window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
             createWizardContext = Url.Action("CreateWizardContext", "Scripts"),
             create = Url.Action("Create", "Scripts"),
+            validateSql = Url.Action("ValidateSql", "Scripts"),
             batchesIndex = Url.Action("Index", "Batches"),
             developerOptions = Url.Action("DeveloperOptions", "Scripts"),
             addPoolFolder = Url.Action("AddPoolFolder", "Batches"),

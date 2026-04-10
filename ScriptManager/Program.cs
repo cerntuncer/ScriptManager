@@ -10,6 +10,8 @@ using DAL.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,8 @@ builder.Services.AddScoped<IUserCredentialRepository, UserCredentialRepository>(
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
+builder.Services.AddSingleton<ISqlScriptSyntaxValidator>(_ =>
+    new SqlScriptSyntaxValidator(_.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection")));
 builder.Services.AddMediatR(typeof(CreateReleaseHandle).Assembly);
 
 var app = builder.Build();

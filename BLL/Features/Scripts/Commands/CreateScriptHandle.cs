@@ -11,15 +11,36 @@ namespace BLL.Features.Scripts.Commands
     {
         private readonly MyContext _db;
         private readonly IScriptConflictSyncService _conflictSync;
+        private readonly ISqlScriptSyntaxValidator _sqlSyntax;
 
-        public CreateScriptHandle(MyContext db, IScriptConflictSyncService conflictSync)
+        public CreateScriptHandle(
+            MyContext db,
+            IScriptConflictSyncService conflictSync,
+            ISqlScriptSyntaxValidator sqlSyntax)
         {
             _db = db;
             _conflictSync = conflictSync;
+            _sqlSyntax = sqlSyntax;
         }
 
         public async Task<CreateScriptResponse> Handle(CreateScriptRequest request, CancellationToken cancellationToken)
         {
+            var syntaxIssues = new List<SqlScriptSyntaxIssue>();
+            var sqlR = _sqlSyntax.Validate(request.SqlScript, "SQL");
+            if (!sqlR.IsValid)
+                syntaxIssues.AddRange(sqlR.Issues);
+            var rbR = _sqlSyntax.Validate(request.RollbackScript, "Rollback");
+            if (!rbR.IsValid)
+                syntaxIssues.AddRange(rbR.Issues);
+            if (syntaxIssues.Count > 0)
+            {
+                return new CreateScriptResponse
+                {
+                    Success = false,
+                    Message = "T-SQL sözdizimi hataları:\n" + SqlScriptSyntaxValidator.FormatIssueList(syntaxIssues)
+                };
+            }
+
             long? finalBatchId = null;
             string? batchNameOut = null;
             long? releaseIdOut = null;
