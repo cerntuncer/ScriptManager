@@ -9,36 +9,35 @@
 
 <div class="page-head">
     <div>
-        <h1 class="page-title">Klasör Ağacı</h1>
-        <p class="page-sub text-muted mb-0 small">Genel klasörler ve <strong>devam eden sürümlerin</strong> kilitli ağaçları bu sayfada üst seviyede birlikte görünür (sürüm etiketi ile). Script eklerken seçtiğin klasöre doğrudan ekleyebilirsin.</p>
+        <h1 class="page-title">Versiyonlar</h1>
+        <p class="page-sub text-muted mb-0 small">Geliştiricilerin script eklediği çalışma alanı. Sürüme alınana kadar serbestçe düzenlenebilir.</p>
     </div>
     @if (canWrite)
     {
         <div class="page-actions">
-            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openPoolRootBatchModal()">Üst seviye klasör oluştur</button>
+            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openPoolRootBatchModal()">Yeni versiyon</button>
         </div>
     }
 </div>
 
 <div class="panel-card">
-    <div class="panel-header">
-        <h3 class="mb-0">Ağaç</h3>
-    </div>
-    <div class="p-3">
-        @if (Model.Count == 0)
-        {
-            <p class="text-muted small mb-0">Henüz klasör yok. Üst seviye klasör oluşturarak başlayın.</p>
-        }
-        else
-        {
-            <ul class="list-unstyled mb-0 pool-batch-tree-root">
-                @foreach (var root in Model)
-                {
-                    <partial name="_PoolBatchTreeNode" model="root" />
-                }
-            </ul>
-        }
-    </div>
+    @if (Model.Count == 0)
+    {
+        <div class="p-4 text-center text-muted small">
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".3" class="mb-2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <p class="mb-1 fw-medium">Henüz klasör yok</p>
+            <p class="mb-0">Sağ üstten <strong>Yeni klasör</strong> oluşturarak başlayabilirsin.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="vtree-root list-unstyled mb-0">
+            @foreach (var root in Model)
+            {
+                <partial name="_PoolBatchTreeNode" model="root" />
+            }
+        </ul>
+    }
 </div>
 
 @section Scripts {
@@ -46,8 +45,11 @@
         window.__batchesPageUrls = @Html.Raw(JsonSerializer.Serialize(new {
             index = Url.Action("Index", "Batches"),
             addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
+            addReleaseFolder = Url.Action("AddFolder", "Releases"),
             treeChildren = Url.Action("TreeChildren", "Batches"),
-            batchPath = Url.Action("BatchPath", "Batches")
+            batchPath = Url.Action("BatchPath", "Batches"),
+            releaseDetailBase = Url.Action("Detail", "Releases", new { id = 999999999L }).Replace("999999999", ""),
+            deletePoolBatch = Url.Action("DeletePoolBatch", "Batches")
         }));
         window.__scriptCreateMeta = { developers: @Html.Raw(devJson) };
         window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {

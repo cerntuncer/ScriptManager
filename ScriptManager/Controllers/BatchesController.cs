@@ -24,7 +24,7 @@ public class BatchesController : Controller
 
     public async Task<IActionResult> Index()
     {
-        ViewData["Title"] = "Klasör Ağacı";
+        ViewData["Title"] = "Versiyonlar";
         ViewBag.CanWrite = AuthHelper.CanWriteOperational(User);
         ViewBag.Developers = await DeveloperReadQueries.ListOptionsAsync(_db);
         var tree = await PoolBatchQueries.GetPoolBatchTreeAsync(_db);
@@ -279,4 +279,70 @@ public class BatchesController : Controller
 
         return Json(result);
     }
+
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> DeletePoolBatch([FromBody] DeletePoolBatchBody? body)
+    {
+        if (!AuthHelper.CanWriteOperational(User))
+            return Forbid();
+
+        var batchId = body?.BatchId ?? 0;
+        if (batchId <= 0)
+            return BadRequest(new { success = false, message = "Geçersiz versiyon." });
+
+        var root = await _db.Batches
+            .FirstOrDefaultAsync(b => b.Id == batchId && !b.IsDeleted);
+
+        if (root == null)
+            return BadRequest(new { success = false, message = "Versiyon bulunamadı." });
+        if (root.ParentBatchId != null)
+            return BadRequest(new { success = false, message = "Yalnızca kök versiyonlar silinebilir." });
+        if (root.IsLocked)
+            return BadRequest(new { success = false, message = "Kilitli versiyon silinemez." });
+        if (root.ReleaseId != null)
+            return BadRequest(new { success = false, message = "Bir sürüme bağlı versiyon silinemez." });
+
+        // Tüm alt batch ID'lerini topla
+        var allBatches = await _db.Batches.AsNoTracking()
+            .Where(b => !b.IsDeleted)
+            .Select(b => new { b.Id, b.ParentBatchId })
+            .ToListAsync();
+
+        var toDelete = new HashSet<long> { batchId };
+        var queue = new Queue<long>();
+        queue.Enqueue(batchId);
+        while (queue.Count > 0)
+        {
+            var cur = queue.Dequeue();
+            foreach (var child in allBatches.Where(b => b.ParentBatchId == cur))
+            {
+                if (toDelete.Add(child.Id))
+                    queue.Enqueue(child.Id);
+            }
+        }
+
+        // Scriptleri soft-delete
+        var scripts = await _db.Scripts
+            .Where(s => s.BatchId.HasValue && toDelete.Contains(s.BatchId.Value) && !s.IsDeleted)
+            .ToListAsync();
+        foreach (var s in scripts)
+            s.IsDeleted = true;
+
+        // Batch'leri soft-delete
+        var batches = await _db.Batches
+            .Where(b => toDelete.Contains(b.Id) && !b.IsDeleted)
+            .ToListAsync();
+        foreach (var b in batches)
+            b.IsDeleted = true;
+
+        await _db.SaveChangesAsync();
+
+        return Json(new { success = true, message = $"\"{root.Name}\" versiyonu ve içeriği silindi." });
+    }
+}
+
+public class DeletePoolBatchBody
+{
+    public long BatchId { get; set; }
 }

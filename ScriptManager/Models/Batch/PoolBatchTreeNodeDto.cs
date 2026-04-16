@@ -15,5 +15,8 @@ public class PoolBatchTreeNodeDto
     public long? LinkedReleaseId { get; set; }
     public string? LinkedReleaseVersion { get; set; }
 
+    /// <summary>Kök, kilitsiz ve herhangi bir sürüme bağlı değilse silinebilir.</summary>
+    public bool CanDelete { get; set; }
+
     public List<PoolBatchTreeNodeDto> Children { get; set; } = new();
 }

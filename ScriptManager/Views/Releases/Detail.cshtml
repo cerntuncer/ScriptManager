@@ -10,28 +10,14 @@
 
 <div class="page-head">
     <div>
-        <h1 class="page-title">@Model.ReleaseName <span class="text-muted fs-5">@Model.Version</span></h1>
-        <p class="page-sub text-muted mb-0 small">
-            @if (Model.IsCancelled)
-            {
-                <span>İptal edilmiş sürüm kaydı; düzenleme yok.</span>
-            }
-            else if (Model.IsTreeLocked)
-            {
-                <span>Ağaç kilitli, yalnızca görüntüleme yapılır. Düzenleme için <strong>Düzenlemeye aç</strong> kullanın.</span>
-            }
-            else
-            {
-                <span>Ağaç düzenlemeye açık. Bu sürümde seçtiğiniz klasöre doğrudan script ekleyebilir veya alt klasör oluşturabilirsiniz.</span>
-            }
-        </p>
+        <h1 class="page-title">@Model.ReleaseName</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.Description))
+        {
+            <p class="page-sub text-muted mb-0 small">@Model.Description</p>
+        }
     </div>
     <div class="page-actions d-flex flex-wrap gap-2">
-        @if (isAdmin && !Model.IsCancelled)
-        {
-            <button type="button" class="btn btn-outline-warning modern-btn text-dark" onclick="cancelThisRelease(@Model.ReleaseId)">Sürümü iptal et</button>
-        }
-        <a class="btn btn-light modern-btn" href="@Url.Action("Index", "Releases")">← Release listesi</a>
+        <a class="btn btn-light modern-btn" href="@Url.Action("Index", "Releases")">← Sürüm listesi</a>
     </div>
 </div>
 

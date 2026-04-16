@@ -7,7 +7,7 @@ namespace ScriptManager.Security;
 
 public static class AuthHelper
 {
-    /// <summary>Oturum yokken (giriş sonraya bırakıldı) tüm yazma sayfalarının çalışması için kimlik doğrulanmamış kullanıcı tam yetkili sayılır.</summary>
+    /// <summary>Oturum yokken tüm yazma sayfalarının çalışması için kimlik doğrulanmamış kullanıcı tam yetkili sayılır.</summary>
     private static bool IsAnonymous(ClaimsPrincipal user) =>
         user?.Identity?.IsAuthenticated != true;
 
@@ -41,9 +41,6 @@ public static class AuthHelper
     public static bool IsAdmin(ClaimsPrincipal user) =>
         IsAnonymous(user) || user.IsInRole(nameof(UserRole.Admin));
 
-    public static bool IsTester(ClaimsPrincipal user) =>
-        !IsAnonymous(user) && user.IsInRole(nameof(UserRole.Tester));
-
     public static bool IsDeveloper(ClaimsPrincipal user) =>
         IsAnonymous(user) || user.IsInRole(nameof(UserRole.Developer));
 
@@ -51,18 +48,13 @@ public static class AuthHelper
     public static bool CanAuthorScripts(ClaimsPrincipal user) =>
         IsAdmin(user) || IsDeveloper(user);
 
-    /// <summary>Testçi panelde çoğu yazma işlemini yapamaz.</summary>
     public static bool CanWriteOperational(ClaimsPrincipal user) =>
         IsAdmin(user) || IsDeveloper(user);
 
     public static bool CanDeleteScript(ClaimsPrincipal user, long scriptDeveloperId)
     {
-        if (IsAdmin(user))
-            return true;
-        if (IsTester(user))
-            return false;
-        if (!IsDeveloper(user))
-            return false;
+        if (IsAdmin(user)) return true;
+        if (!IsDeveloper(user)) return false;
         var uid = GetUserId(user);
         return uid.HasValue && uid.Value == scriptDeveloperId;
     }

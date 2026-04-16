@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +9,6 @@ namespace DAL.Enums
     public enum ScriptStatus
     {
         Draft = 1,
-        Testing = 2,
         Ready = 3,
         Conflict = 4,
         Deleted = 5

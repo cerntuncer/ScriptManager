@@ -37,48 +37,179 @@ function debounce(fn, delay = 350) {
     };
 }
 
+const _statusLabel = { Draft: "Taslak", Ready: "Hazır", Conflict: "Çakışma", Deleted: "Silindi" };
+const _statusCls   = { Draft: "gs-badge--draft", Ready: "gs-badge--ready", Conflict: "gs-badge--conflict" };
+
 function initGlobalSearch() {
     const input = document.getElementById("globalSearchInput");
     const resultPanel = document.getElementById("globalSearchResult");
-
     if (!input || !resultPanel) return;
 
-    const handleSearch = debounce(() => {
-        const value = input.value.trim().toLowerCase();
+    let _abortCtrl = null;
 
-        if (!value) {
+    const handleSearch = debounce(async () => {
+        const value = input.value.trim();
+        if (!value || value.length < 2) {
             resultPanel.classList.add("d-none");
             resultPanel.innerHTML = "";
             return;
         }
 
+        if (_abortCtrl) _abortCtrl.abort();
+        _abortCtrl = new AbortController();
+
         resultPanel.classList.remove("d-none");
-        resultPanel.innerHTML = `
-            <div class="p-2">
-                <div><strong>${value}</strong> için arama sonucu altyapısı hazır.</div>
-                <small class="text-muted">İstersen bunu sonra API tabanlı aramaya bağlarız.</small>
-            </div>`;
-    }, 400);
+        resultPanel.innerHTML = `<div class="gs-loading">Aranıyor...</div>`;
+
+        try {
+            const res = await fetch(`/Scripts/QuickSearch?q=${encodeURIComponent(value)}`, { signal: _abortCtrl.signal });
+            const data = await res.json();
+
+            if (!data.results || data.results.length === 0) {
+                resultPanel.innerHTML = `<div class="gs-empty">Sonuç bulunamadı</div>`;
+                return;
+            }
+
+            const rows = data.results.map(r => {
+                const badge = `<span class="gs-badge ${_statusCls[r.status] || ''}">${_statusLabel[r.status] || r.status}</span>`;
+                const sub = [r.developer, r.batch].filter(Boolean).join(" · ");
+                return `<a class="gs-row" href="/Scripts/Detail/${r.id}">
+                    <div class="gs-row-main">
+                        <span class="gs-name">${escHtml(r.name)}</span>
+                        ${badge}
+                    </div>
+                    ${sub ? `<span class="gs-sub">${escHtml(sub)}</span>` : ''}
+                </a>`;
+            }).join("");
+
+            resultPanel.innerHTML = rows;
+        } catch (e) {
+            if (e.name !== "AbortError") {
+                resultPanel.innerHTML = `<div class="gs-empty">Arama başarısız</div>`;
+            }
+        }
+    }, 350);
 
     input.addEventListener("input", handleSearch);
+
+    document.addEventListener("click", e => {
+        if (!input.contains(e.target) && !resultPanel.contains(e.target)) {
+            resultPanel.classList.add("d-none");
+        }
+    });
+
+    input.addEventListener("focus", () => {
+        if (resultPanel.innerHTML && !resultPanel.classList.contains("d-none")) {
+            // keep open
+        }
+    });
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
 function setupTableFilter(inputId, rowSelector) {
     const input = document.getElementById(inputId);
-
     if (!input) return;
+
+    // initialize all rows as matching
+    document.querySelectorAll(rowSelector).forEach(r => { r.dataset.filterHidden = "0"; });
 
     const filterFn = debounce(() => {
         const value = input.value.trim().toLowerCase();
         const rows = document.querySelectorAll(rowSelector);
-
         rows.forEach(row => {
-            const text = row.innerText.toLowerCase();
-            row.style.display = text.includes(value) ? "" : "none";
+            const matches = !value || row.innerText.toLowerCase().includes(value);
+            row.dataset.filterHidden = matches ? "0" : "1";
         });
+        // notify pagination if registered, otherwise fall back to direct display
+        const firstRow = document.querySelector(rowSelector);
+        const tbody = firstRow?.closest("tbody");
+        if (tbody?.id && window.__pgState?.[tbody.id]) {
+            window.__pgState[tbody.id].refresh(true);
+        } else {
+            rows.forEach(r => {
+                r.style.display = r.dataset.filterHidden === "1" ? "none" : "";
+            });
+        }
     }, 300);
 
     input.addEventListener("input", filterFn);
+}
+
+/* ================================================
+   PAGINATION
+   ================================================ */
+window.__pgState = window.__pgState || {};
+
+function setupPagination(tbodyId, pageSize) {
+    pageSize = pageSize || 15;
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    const tableWrap = tbody.closest(".table-wrap");
+    let bar = document.getElementById("pgbar_" + tbodyId);
+    if (!bar) {
+        bar = document.createElement("div");
+        bar.id = "pgbar_" + tbodyId;
+        bar.className = "pagination-bar";
+        if (tableWrap) tableWrap.insertAdjacentElement("afterend", bar);
+        else tbody.closest("table")?.insertAdjacentElement("afterend", bar);
+    }
+
+    const state = { currentPage: 1 };
+
+    function render() {
+        const allRows = Array.from(tbody.querySelectorAll("tr"));
+        const pageableRows = allRows.filter(r => r.dataset.filterHidden !== "1");
+        const total = pageableRows.length;
+        const pages = Math.max(1, Math.ceil(total / pageSize));
+        if (state.currentPage > pages) state.currentPage = pages;
+        if (state.currentPage < 1) state.currentPage = 1;
+
+        const start = (state.currentPage - 1) * pageSize;
+        const end = start + pageSize;
+
+        allRows.forEach(r => { r.style.display = r.dataset.filterHidden === "1" ? "none" : "none"; });
+        pageableRows.forEach((r, i) => { r.style.display = (i >= start && i < end) ? "" : "none"; });
+
+        if (total === 0) { bar.innerHTML = ""; return; }
+        if (pages <= 1) {
+            bar.innerHTML = `<div class="pg-info">${total} kayıt</div>`;
+            return;
+        }
+
+        const s = start + 1, e = Math.min(end, total);
+        let html = `<div class="pg-info">${s}–${e} / ${total} kayıt</div><div class="pg-controls">`;
+        html += `<button class="pg-btn" ${state.currentPage === 1 ? "disabled" : ""} onclick="__pgGoto('${tbodyId}',${state.currentPage - 1})">‹</button>`;
+        for (let p = 1; p <= pages; p++) {
+            if (pages > 7 && p !== 1 && p !== pages && Math.abs(p - state.currentPage) > 2) {
+                if (p === state.currentPage - 3 || p === state.currentPage + 3)
+                    html += `<span class="pg-ellipsis">…</span>`;
+                continue;
+            }
+            html += `<button class="pg-btn${p === state.currentPage ? " pg-btn--active" : ""}" onclick="__pgGoto('${tbodyId}',${p})">${p}</button>`;
+        }
+        html += `<button class="pg-btn" ${state.currentPage === pages ? "disabled" : ""} onclick="__pgGoto('${tbodyId}',${state.currentPage + 1})">›</button></div>`;
+        bar.innerHTML = html;
+    }
+
+    state.render = render;
+    state.refresh = function (resetToFirst) {
+        if (resetToFirst) state.currentPage = 1;
+        render();
+    };
+
+    window.__pgState[tbodyId] = state;
+    render();
+}
+
+function __pgGoto(tbodyId, page) {
+    const s = window.__pgState?.[tbodyId];
+    if (!s) return;
+    s.currentPage = page;
+    s.render();
 }
 
 /** Release → batch → script ağacında metin araması */
@@ -295,7 +426,21 @@ async function submitConflictReview(markResolved) {
     showToast(data?.message || "Tamam.", "success");
     const modalEl = document.getElementById("globalAppModal");
     bootstrap.Modal.getInstance(modalEl)?.hide();
-    window.location.reload();
+    if (markResolved) {
+        // satırı DOM'dan kaldır, pagination güncelle
+        const tr = document.querySelector(`tr[data-conflict-id="${cid}"]`);
+        if (tr) {
+            tr.remove();
+            window.__pgState?.["conflictTableBody"]?.refresh();
+            const h3 = document.querySelector(".panel-header h3");
+            if (h3) {
+                const remaining = document.querySelectorAll("#conflictTableBody tr").length;
+                h3.textContent = `Açık çakışmalar (${remaining})`;
+            }
+        } else {
+            window.location.reload();
+        }
+    }
 }
 
 function scriptWizardRenderDeveloperOptions(devs) {
@@ -360,23 +505,121 @@ function toggleBatchTreeBranch(btn) {
     btn.setAttribute("aria-expanded", hidden ? "false" : "true");
 }
 
+/** Yeni vtree (Versiyonlar sayfası) toggle */
+function vtreeToggle(btn) {
+    const item = btn.closest(".vtree-item");
+    if (!item) return;
+    const children = item.querySelector(":scope > .vtree-children");
+    if (!children) return;
+    const isOpen = children.classList.toggle("vtree-children--hidden");
+    btn.classList.toggle("vtree-toggle--open", !isOpen);
+    btn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+}
+
+/** Klasör seçim modalı: alt klasör ekle / script ekle */
+function openFolderActionModal(batchId, batchName, canAddChild, canAddScript, linkedReleaseId) {
+    const rid = linkedReleaseId != null ? Number(linkedReleaseId) : 0;
+    const cards = [];
+
+    if (canAddChild) {
+        cards.push(`
+            <button type="button" class="folder-action-card"
+                    onclick="closeFolderActionAndRun(() => openPoolChildBatchModal(${batchId}, ${rid}))">
+                <span class="folder-action-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+                    </svg>
+                </span>
+                <span class="folder-action-body">
+                    <span class="folder-action-title">Alt Klasör Ekle</span>
+                    <span class="folder-action-sub">Bu klasörün altına yeni bir klasör oluştur</span>
+                </span>
+            </button>`);
+    }
+
+    if (canAddScript) {
+        const scriptPreset = rid > 0
+            ? `{ poolBatchId: ${batchId}, releaseId: ${rid} }`
+            : `{ poolBatchId: ${batchId} }`;
+        cards.push(`
+            <button type="button" class="folder-action-card"
+                    onclick="closeFolderActionAndRun(() => openScriptCreateWizard(${scriptPreset}))">
+                <span class="folder-action-icon folder-action-icon--script">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+                    </svg>
+                </span>
+                <span class="folder-action-body">
+                    <span class="folder-action-title">Script Ekle</span>
+                    <span class="folder-action-sub">Bu klasöre yeni bir script ekle</span>
+                </span>
+            </button>`);
+    }
+
+    if (!cards.length) {
+        if (rid > 0) {
+            const base = window.__batchesPageUrls?.releaseDetailBase ?? "/Releases/Detail/";
+            const detailUrl = base + rid;
+            const content = `
+                <div class="folder-action-list">
+                    <a class="folder-action-card text-decoration-none" href="${detailUrl}">
+                        <span class="folder-action-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                            </svg>
+                        </span>
+                        <span class="folder-action-body">
+                            <span class="folder-action-title">Sürüm Detayına Git</span>
+                            <span class="folder-action-sub">Bu klasör bir sürüme bağlı. Düzenlemek için sürüm sayfasını kullanın.</span>
+                        </span>
+                    </a>
+                </div>`;
+            openGlobalModal(escapeHtml(batchName), content);
+        }
+        return;
+    }
+
+    const content = `<div class="folder-action-list">${cards.join("")}</div>`;
+    openGlobalModal(escapeHtml(batchName), content);
+}
+
+function closeFolderActionAndRun(fn) {
+    const modalEl = document.getElementById("globalAppModal");
+    const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+    if (m) { m.hide(); setTimeout(fn, 280); } else fn();
+}
+
 function swPickerNodeHtml(c) {
     const id = Number(c.batchId);
     const nm = escapeHtml(c.name || "");
-    const lockBadge = c.isLocked ? ` <span class="badge bg-secondary">kilitli</span>` : "";
-    const disabled = c.canAddScript ? "" : "disabled";
+    const isLocked = !!c.isLocked;
+    const canSelect = !!c.canAddScript;
     const hasChildren = c.hasChildren === true;
-    const toggle = hasChildren
-        ? `<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="swPickerToggleNode(this)">+</button>`
-        : `<span class="text-muted small px-2">•</span>`;
+
+    const toggleBtn = hasChildren
+        ? `<button type="button" class="sw-toggle" onclick="swPickerToggleNode(this)" aria-expanded="false">
+               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5l8 7-8 7"/></svg>
+           </button>`
+        : `<span class="sw-toggle-leaf"></span>`;
+
+    const lockBadge = isLocked ? `<span class="sw-lock-badge">Kilitli</span>` : "";
+    const check = canSelect
+        ? `<input class="sw-node-check" type="checkbox" data-id="${id}" onchange="swPickerSelectNode(this)" />`
+        : `<span class="sw-no-select"></span>`;
+
     return `
-        <li class="sw-node mb-1" data-id="${id}" data-has-children="${hasChildren ? "1" : "0"}" data-loaded="0">
-            <div class="d-flex align-items-center gap-2">
-                ${toggle}
-                <input class="form-check-input sw-node-check" type="checkbox" data-id="${id}" ${disabled} onchange="swPickerSelectNode(this)" />
-                <span>${nm}${lockBadge}</span>
+        <li class="sw-node" data-id="${id}" data-has-children="${hasChildren ? "1" : "0"}" data-loaded="0">
+            <div class="sw-row ${canSelect ? "sw-row--selectable" : "sw-row--disabled"}">
+                ${toggleBtn}
+                <svg class="sw-folder-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                ${check}
+                <span class="sw-folder-name">${nm}</span>
+                ${lockBadge}
             </div>
-            <ul class="sw-children list-unstyled ms-4 mt-1 d-none"></ul>
+            <ul class="sw-children list-unstyled d-none"></ul>
         </li>`;
 }
 
@@ -389,7 +632,7 @@ async function swPickerLoadChildren(node) {
     if (!childrenWrap) return;
     const { children } = await fetchTreeChildrenList(rid, id);
     if (!children || !children.length) {
-        childrenWrap.innerHTML = `<li class="small text-muted">Alt klasör yok.</li>`;
+        childrenWrap.innerHTML = `<li class="sw-row sw-row--disabled" style="font-size:12px;padding-left:8px">Alt klasör yok.</li>`;
     } else {
         childrenWrap.innerHTML = children.map(swPickerNodeHtml).join("");
     }
@@ -405,7 +648,8 @@ async function swPickerToggleNode(btn) {
     const childrenWrap = node.querySelector(".sw-children");
     if (!childrenWrap) return;
     const hidden = childrenWrap.classList.toggle("d-none");
-    btn.textContent = hidden ? "+" : "−";
+    btn.classList.toggle("sw-toggle--open", !hidden);
+    btn.setAttribute("aria-expanded", String(!hidden));
 }
 
 function swPickerPickLeaf(id) {
@@ -419,16 +663,43 @@ function swPickerSelectNode(el) {
     const id = Number(el?.dataset?.id || 0);
     document.querySelectorAll(".sw-node-check").forEach((x) => {
         if (x !== el) x.checked = false;
+        x.closest(".sw-row")?.classList.remove("sw-row--selected");
     });
-    if (checked && id > 0) swPickerPickLeaf(id);
-    else {
+    if (checked && id > 0) {
+        el.closest(".sw-row")?.classList.add("sw-row--selected");
+        swPickerPickLeaf(id);
+    } else {
         document.getElementById("swSelectedBatchId").value = "";
         document.getElementById("swLeafPickedHint")?.classList.add("d-none");
     }
 }
 
 function swNewFolderButtonHtml() {
-    return `<button type="button" class="btn btn-sm btn-outline-primary" onclick="swGoFolderTreePage()">Yeni klasör oluştur</button>`;
+    return "";
+}
+
+async function deletePoolBatch(batchId, name) {
+    const url = window.__batchesPageUrls?.deletePoolBatch;
+    if (!url) { showToast("Silme adresi tanımlı değil.", "error"); return; }
+    if (!confirm(`"${name}" versiyonu ve tüm içeriği (alt klasörler + scriptler) silinecek. Bu işlem geri alınamaz. Devam?`)) return;
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ batchId })
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok || data?.success === false) {
+        showToast(data?.message || "Silinemedi.", "error");
+        return;
+    }
+    showToast(data?.message || "Silindi.", "success");
+    // Ağaç elemanını DOM'dan kaldır
+    const li = document.querySelector(`.vtree-item [onclick*="openFolderActionModal(${batchId},"]`)?.closest(".vtree-item")
+            || document.querySelector(`.vtree-delete-btn[onclick*="deletePoolBatch(${batchId},"]`)?.closest(".vtree-item");
+    if (li) li.remove();
+    else window.location.reload();
 }
 
 function swGoFolderTreePage() {
@@ -487,7 +758,7 @@ async function swPickerApplyPreset() {
                 const ul = node.querySelector(".sw-children");
                 const btn = node.querySelector("button");
                 if (ul) ul.classList.remove("d-none");
-                if (btn) btn.textContent = "−";
+                if (btn) { btn.classList.add("sw-toggle--open"); btn.setAttribute("aria-expanded", "true"); }
                 container = ul;
             }
         }
@@ -495,6 +766,7 @@ async function swPickerApplyPreset() {
     const target = host.querySelector(`.sw-node-check[data-id="${want}"]`);
     if (target && !target.disabled) {
         target.checked = true;
+        target.closest(".sw-row")?.classList.add("sw-row--selected");
         swPickerSelectNode(target);
         window.__swPresetLeafId = null;
     }
@@ -507,10 +779,10 @@ async function renderScriptWizardBatchPicker() {
     host.innerHTML = `<div class="text-center py-2"><span class="spinner-border spinner-border-sm"></span></div>`;
     const { children } = await fetchTreeChildrenList(rid, 0);
     if (!children || !children.length) {
-        host.innerHTML = `<div class="small text-muted mb-2">Henüz klasör yok.</div>${swNewFolderButtonHtml()}`;
+        host.innerHTML = `<div class="sw-empty-state"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>Henüz klasör yok. Versiyonlar sayfasından bir versiyon oluşturun.</span></div>`;
         return;
     }
-    host.innerHTML = `<div class="d-flex justify-content-end mb-2">${swNewFolderButtonHtml()}</div><ul class="list-unstyled mb-0">${children.map(swPickerNodeHtml).join("")}</ul>`;
+    host.innerHTML = `<ul class="sw-tree-list list-unstyled mb-0">${children.map(swPickerNodeHtml).join("")}</ul>`;
     await swPickerApplyPreset();
 }
 
@@ -587,17 +859,19 @@ async function postReleaseTreeLock(releaseId, lock) {
 
 function openPoolRootBatchModal() {
     window.__pendingPoolBatchParentId = 0;
-    openPoolBatchNameModalInner("Üst seviye klasör oluştur");
+    window.__pendingPoolBatchReleaseId = 0;
+    openPoolBatchNameModalInner("Versiyon oluştur", "Versiyon adı", "Oluştur");
 }
 
-function openPoolChildBatchModal(parentId) {
+function openPoolChildBatchModal(parentId, linkedReleaseId) {
     const pid = parentId != null ? Number(parentId) : 0;
     if (!pid) return;
     window.__pendingPoolBatchParentId = pid;
-    openPoolBatchNameModalInner("Alt batch oluştur");
+    window.__pendingPoolBatchReleaseId = linkedReleaseId != null ? Number(linkedReleaseId) : 0;
+    openPoolBatchNameModalInner("Alt Klasör Ekle", "Klasör adı", "Ekle");
 }
 
-function openPoolBatchNameModalInner(title) {
+function openPoolBatchNameModalInner(title, fieldLabel, btnLabel) {
     const meta = { ...(window.__scriptCreateMeta || { developers: [] }) };
     const devOpts =
         meta.developers && meta.developers.length
@@ -611,7 +885,7 @@ function openPoolBatchNameModalInner(title) {
     const content = `
         <form id="poolBatchCreateForm" class="row g-3">
             <div class="col-12">
-                <label class="form-label">Klasör adı</label>
+                <label class="form-label">${escapeHtml(fieldLabel ?? "Ad")}</label>
                 <input id="poolBatchNameInput" class="form-control" autocomplete="off" />
             </div>
             <div class="col-12">
@@ -620,14 +894,17 @@ function openPoolBatchNameModalInner(title) {
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
-                <button type="button" class="btn btn-primary" onclick="submitPoolBatchCreate()">Oluştur</button>
+                <button type="button" class="btn btn-primary" onclick="submitPoolBatchCreate()">${escapeHtml(btnLabel ?? "Oluştur")}</button>
             </div>
         </form>`;
     openGlobalModal(title, content);
 }
 
 async function submitPoolBatchCreate() {
-    const url = window.__batchesPageUrls?.addPoolFolder;
+    const rid = window.__pendingPoolBatchReleaseId || 0;
+    const url = rid > 0
+        ? (window.__batchesPageUrls?.addReleaseFolder)
+        : (window.__batchesPageUrls?.addPoolFolder);
     const name = document.getElementById("poolBatchNameInput")?.value?.trim();
     const createdByRaw = document.getElementById("poolBatchCreatedBy")?.value?.trim();
     const createdBy = effectiveUserIdFromForm(createdByRaw);
@@ -715,9 +992,12 @@ async function openScriptCreateWizard(preset) {
                 <label class="form-label">Hedef klasör</label>
                 <p class="small text-muted mb-2">${escapeHtml(targetLabel)}</p>
                 <input type="hidden" id="swSelectedBatchId" value="" />
-                <div id="swLeafPickedHint" class="alert alert-success py-1 px-2 small d-none">Seçilen klasöre eklenecek.</div>
-                <div id="swBatchPickerHost" class="border rounded p-2 bg-light" style="max-height:16rem;overflow:auto"></div>
-                <small class="text-muted d-block mt-1">Kilitli klasörlere script eklenemez. Yeni klasör oluşturmak istersen bu alandaki butonu kullanabilirsin.</small>
+                <div id="swLeafPickedHint" class="sw-picked-hint d-none">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Seçilen klasöre eklenecek.
+                </div>
+                <div id="swBatchPickerHost" class="sw-tree-host"></div>
+                <small class="text-muted d-block mt-1">Kilitli klasörler seçilemez.</small>
             </div>
             <div class="col-md-12"><label class="form-label">Script adı</label><input id="scriptName" class="form-control" autocomplete="off" /></div>
             <div class="col-md-12"><label class="form-label">Geliştirici</label><select id="createDeveloperId" class="form-select">${devOpts}</select></div>
@@ -1000,11 +1280,46 @@ function appendScriptRowFromCreateResponse(data) {
         <td><span class="text-muted">—</span></td>
         <td>${escapeHtml(created)}</td>
         <td class="text-nowrap"><a class="btn btn-sm btn-table" href="${detailHref}">Detay</a> ${delBtn}</td>`;
+    tr.dataset.filterHidden = "0";
     tbody.insertBefore(tr, tbody.firstChild);
 
     const filterInput = document.getElementById("scriptFilterInput");
     if (filterInput && filterInput.value.trim()) {
         filterInput.dispatchEvent(new Event("input"));
+    } else {
+        window.__pgState?.["scriptTableBody"]?.refresh(true);
+    }
+}
+
+async function markScriptReadyInline(scriptId, btn) {
+    const url = window.__scriptsPageUrls?.changeStatus;
+    if (!url) { showToast("URL tanımlı değil.", "error"); return; }
+
+    btn.disabled = true;
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ scriptId, newStatus: 3 }) // 3 = Ready
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+
+    if (!res.ok || data?.success === false) {
+        showToast(data?.message || "Durum güncellenemedi.", "error");
+        btn.disabled = false;
+        return;
+    }
+
+    showToast("Script hazır olarak işaretlendi.", "success");
+
+    const td = btn.closest("td");
+    if (td) {
+        const badge = td.querySelector(".script-badge");
+        if (badge) {
+            badge.className = "script-badge script-badge--ready";
+            badge.textContent = "Hazır";
+        }
+        btn.remove();
     }
 }
 
@@ -1033,8 +1348,10 @@ async function deleteScriptFromList(scriptId, btn) {
     }
     showToast(data?.message || "Silindi.", "success");
     const tr = btn && btn.closest ? btn.closest("tr") : null;
-    if (tr) tr.remove();
-    else window.location.reload();
+    if (tr) {
+        tr.remove();
+        window.__pgState?.["scriptTableBody"]?.refresh();
+    } else window.location.reload();
 }
 
 function downloadTextFile(filename, text) {
@@ -1251,60 +1568,66 @@ async function openCreateReleaseModal() {
         try {
             const r = await fetch(devUrl, { headers: { Accept: "application/json" } });
             if (r.ok) devData = await r.json();
-        } catch {
-            devData = null;
-        }
+        } catch { devData = null; }
     }
-
-    if (devData && Array.isArray(devData.developers) && devData.developers.length > 0) {
+    if (devData && Array.isArray(devData.developers) && devData.developers.length > 0)
         meta.developers = devData.developers;
-    }
-
-    const rootsRes = await fetchTreeChildrenList(null, 0);
-    const roots = (rootsRes.children || []).filter((x) => x.canPackageRelease === true);
-    const rootOpts = roots.length
-        ? `<option value="">Ana kök seçin...</option>${roots
-              .map((x) => `<option value="${x.batchId}">${escapeHtml(x.name || "")}</option>`)
-              .join("")}`
-        : `<option value="">Onaylı ana kök klasör bulunamadı</option>`;
 
     const devOpts =
         meta.developers && meta.developers.length
-            ? meta.developers
-                  .map(
-                      (d) =>
-                          `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`
-                  )
-                  .join("")
+            ? meta.developers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`).join("")
             : `<option value="">Kayıtlı kullanıcı bulunamadı</option>`;
+
+    // Pool'daki mevcut versiyonları yükle
+    const { children: poolVersions } = await fetchTreeChildrenList(null, 0);
+    let versionPickerHtml;
+    if (!poolVersions || poolVersions.length === 0) {
+        versionPickerHtml = `<div class="sw-empty-state" style="padding:12px 0">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Havuzda versiyon yok. Önce <a href="/Batches">Versiyonlar</a> sayfasında bir versiyon oluşturun.</span>
+        </div>`;
+    } else {
+        versionPickerHtml = poolVersions.map(v => {
+            const isLinked = !!v.linkedReleaseVersion;
+            const disabled = isLinked ? "disabled" : "";
+            const hint = isLinked ? ` <span class="sw-lock-badge">${escapeHtml(v.linkedReleaseVersion)}</span>` : "";
+            return `<label class="rel-vpick-row ${isLinked ? "rel-vpick-row--disabled" : ""}">
+                <input type="radio" name="relVpick" class="rel-vpick-radio" value="${v.batchId}" ${disabled} />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span class="rel-vpick-name">${escapeHtml(v.name || "")}</span>${hint}
+            </label>`;
+        }).join("");
+    }
 
     const content = `
         <form id="createReleaseForm" class="row g-3">
-            <div class="col-md-12">
-                <label class="form-label">Release adı</label>
-                <input id="releaseName" class="form-control" autocomplete="off" />
+            <div class="col-12">
+                <label class="form-label fw-semibold">Sürüm adı</label>
+                <input id="releaseName" class="form-control" autocomplete="off"
+                       placeholder="ör. v2.1.0, Nisan-Hotfix, 2026-04-16" />
+            </div>
+            <div class="col-12">
+                <label class="form-label fw-semibold">Versiyon seç</label>
+                <p class="small text-muted mb-2">Bu sürüme bağlanacak versiyon. Seçilen versiyon kilitlenir.</p>
+                <div class="rel-vpick-host">${versionPickerHtml}</div>
+            </div>
+            <div class="col-12">
+                <label class="form-label fw-semibold">Not <span class="text-muted fw-normal">(isteğe bağlı)</span></label>
+                <textarea id="releaseDescription" class="form-control" rows="2"
+                          placeholder="Bu sürümde neler değişti, hangi modülü etkiliyor..."></textarea>
             </div>
             <div class="col-md-12">
-                <label class="form-label">Versiyon</label>
-                <input id="releaseVersion" class="form-control" autocomplete="off" />
-            </div>
-            <div class="col-md-12">
-                <label class="form-label">Oluşturan</label>
+                <label class="form-label fw-semibold">Oluşturan</label>
                 <select id="releaseCreatedBy" class="form-select">${devOpts}</select>
-            </div>
-            <div class="col-md-12">
-                <label class="form-label">Ana kök klasör</label>
-                <select id="existingRootBatchId" class="form-select">${rootOpts}</select>
-                <small class="text-muted d-block mt-1">Sadece release'e uygun (onaylı) ana kök klasörler listelenir.</small>
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
-                <button type="button" class="btn btn-primary" onclick="submitCreateRelease()" ${roots.length ? "" : "disabled"}>Oluştur</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateRelease()">Oluştur</button>
             </div>
         </form>
     `;
 
-    openGlobalModal("Yeni release", content);
+    openGlobalModal("Yeni sürüm", content);
 }
 
 function appendReleaseRowFromCreateResponse(data) {
@@ -1318,8 +1641,7 @@ function appendReleaseRowFromCreateResponse(data) {
         ? String(placeholder).replace(/999999999/g, idStr)
         : `/Releases/Detail/${encodeURIComponent(idStr)}`;
 
-    const releaseName = data.releaseName ?? data.ReleaseName ?? "";
-    const version = data.version ?? data.Version ?? "";
+    const releaseName = data.releaseName ?? data.ReleaseName ?? data.version ?? data.Version ?? "";
     const scriptCount = data.scriptCount ?? data.ScriptCount ?? 0;
     const rbCount = data.rollbackScriptCount ?? data.RollbackScriptCount ?? 0;
     const created = data.createdAtDisplay ?? data.CreatedAtDisplay ?? "";
@@ -1332,16 +1654,18 @@ function appendReleaseRowFromCreateResponse(data) {
     const tr = document.createElement("tr");
     tr.innerHTML = `${adminCb}
         <td>${escapeHtml(releaseName)}</td>
-        <td>${escapeHtml(version)}</td>
         <td>${escapeHtml(String(scriptCount))}</td>
         <td>${escapeHtml(String(rbCount))}</td>
         <td>${escapeHtml(created)}</td>
         <td><a class="btn btn-sm btn-table" href="${detailHref}">Detay</a></td>`;
+    tr.dataset.filterHidden = "0";
     tbody.insertBefore(tr, tbody.firstChild);
 
     const filterInput = document.getElementById("releaseFilterInput");
     if (filterInput && filterInput.value.trim()) {
         filterInput.dispatchEvent(new Event("input"));
+    } else {
+        window.__pgState?.["releaseTableBody"]?.refresh(true);
     }
 }
 
@@ -1353,12 +1677,18 @@ async function submitCreateRelease() {
     }
 
     const name = document.getElementById("releaseName")?.value?.trim();
-    const version = document.getElementById("releaseVersion")?.value?.trim();
+    const description = document.getElementById("releaseDescription")?.value?.trim() || null;
     const createdByRaw = document.getElementById("releaseCreatedBy")?.value?.trim();
     const createdBy = effectiveUserIdFromForm(createdByRaw);
+    const selectedVersionEl = document.querySelector(".rel-vpick-radio:checked");
+    const selectedVersionId = selectedVersionEl ? Number(selectedVersionEl.value) : 0;
 
-    if (!name || !version) {
-        showToast("Release adı ve versiyon zorunludur.", "error");
+    if (!name) {
+        showToast("Sürüm adı zorunludur.", "error");
+        return;
+    }
+    if (!selectedVersionId) {
+        showToast("Bir versiyon seçin.", "error");
         return;
     }
     if (!createdBy) {
@@ -1366,17 +1696,13 @@ async function submitCreateRelease() {
         return;
     }
 
-    const rid = Number(document.getElementById("existingRootBatchId")?.value || 0);
-    if (!rid) {
-        showToast("Ana kök klasör seçin.", "error");
-        return;
-    }
     const payload = {
         name,
-        version,
+        version: name,
+        description,
         createdBy,
         rootMode: "existing",
-        existingRootBatchId: rid,
+        existingRootBatchId: selectedVersionId,
         newRootBatchName: null
     };
 

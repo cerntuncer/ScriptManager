@@ -8,7 +8,6 @@
     var owns = Model.DeveloperId == actorUserId;
     var st = Model.StatusEnum;
     var canDraftActions = canStatus && st == ScriptStatus.Draft && (actorRole == UserRole.Admin || (actorRole == UserRole.Developer && owns));
-    var canApproveReady = canStatus && st == ScriptStatus.Testing && actorRole == UserRole.Tester;
 }
 
 <div class="page-head">
@@ -44,8 +43,7 @@
     </div>
     <div class="p-3">
         <p class="small text-muted mb-3 mb-md-2">
-            Yeni kayıt <strong>Taslak</strong>tır. Geliştirici scripti <strong>İncelemede (test)</strong> durumuna alarak testçiye açar veya test gerekmiyorsa doğrudan <strong>Hazır</strong> yapar.
-            <strong>Testçi</strong> incelemeden sonra <strong>Hazır</strong> onayını verir (yönetici bu adımı atlayamaz; ayrı bir testçi hesabı gerekir).
+            Yeni kayıt <strong>Taslak</strong>tır. Geliştirici veya yönetici scripti doğrudan <strong>Hazır</strong> durumuna alabilir.
             <strong>Çakışma</strong> durumu aynı sürümde tablo örtüşmesi için sistem tarafından işaretlenir.
         </p>
         @if (st == ScriptStatus.Conflict)
@@ -56,18 +54,10 @@
         {
             <p class="mb-0 small text-success">Bu script <strong>hazır</strong> — paketleme ve sonraki adımlar için uygun.</p>
         }
-        else if (canDraftActions || canApproveReady)
+        else if (canDraftActions)
         {
             <div class="d-flex flex-wrap gap-2">
-                @if (canDraftActions)
-                {
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Testing))">Testçiye gönder (İncelemede)</button>
-                    <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Test atla — doğrudan Hazır</button>
-                }
-                @if (canApproveReady)
-                {
-                    <button type="button" class="btn btn-sm btn-success" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Onayla — Hazır</button>
-                }
+                <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Hazır olarak işaretle</button>
             </div>
         }
         else
@@ -77,14 +67,66 @@
     </div>
 </div>
 
-<div class="content-grid single-column">
+@if (!string.IsNullOrWhiteSpace(Model.ReferencedTablesDisplay))
+{
+    <div class="panel-card mb-4">
+        <div class="panel-header">
+            <h3 class="mb-0">Etkilenen nesneler</h3>
+        </div>
+        <div class="p-3">
+                        <p class="small text-muted mb-2">Koddan otomatik tespit edildi.</p>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var tbl in Model.ReferencedTablesDisplay.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                {
+                    <span class="badge text-bg-light border small font-monospace">@tbl</span>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (canDraftActions)
+{
+    <div class="panel-card mb-4" id="editScriptPanel" style="display:none">
+        <div class="panel-header d-flex justify-content-between align-items-center">
+            <h3 class="mb-0">Scripti düzenle</h3>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditPanel()">Kapat</button>
+        </div>
+        <div class="p-3" id="editScriptForm">
+            <div class="mb-3">
+                <label class="form-label fw-semibold small">Script adı</label>
+                <input id="editName" type="text" class="form-control" value="@Model.Name" maxlength="200" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold small">SQL</label>
+                <textarea id="editSql" class="form-control font-monospace" rows="10" style="font-size:13px;">@Model.SqlScript</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold small">Rollback SQL <span class="text-muted">(opsiyonel)</span></label>
+                <textarea id="editRollback" class="form-control font-monospace" rows="5" style="font-size:13px;">@(Model.RollbackScript ?? "")</textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary" onclick="saveScriptEdit()">Kaydet</button>
+                <button type="button" class="btn btn-light" onclick="toggleEditPanel()">İptal</button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="content-grid single-column" id="scriptViewPanels">
     <section class="panel-card">
         <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h3 class="mb-0">SQL</h3>
-            <button type="button" class="btn btn-sm btn-outline-primary"
-                    onclick="downloadTextFile('@(Model.ScriptId)-script.sql', document.getElementById('sqlBlock').innerText)">
-                .sql indir
-            </button>
+            <div class="d-flex gap-2">
+                @if (canDraftActions)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditPanel()">Düzenle</button>
+                }
+                <button type="button" class="btn btn-sm btn-outline-primary"
+                        onclick="downloadTextFile('@(Model.ScriptId)-script.sql', document.getElementById('sqlBlock').innerText)">
+                    .sql indir
+                </button>
+            </div>
         </div>
         <pre id="sqlBlock" class="code-box">@Model.SqlScript</pre>
     </section>
@@ -113,6 +155,7 @@
 
 @section Scripts {
     <script>
+        const __scriptUpdateUrl = "@Url.Action("Update", "Scripts")";
         const __scriptChangeStatusUrl = "@Url.Action("ChangeStatus", "Scripts")";
         async function changeScriptStatus(scriptId, newStatus) {
             const res = await fetch(__scriptChangeStatusUrl, {
@@ -130,6 +173,39 @@
             }
             showToast(data?.message || "Tamam.", "success");
             window.location.reload();
+        }
+
+        function toggleEditPanel() {
+            const panel = document.getElementById("editScriptPanel");
+            if (!panel) return;
+            panel.style.display = panel.style.display === "none" ? "" : "none";
+        }
+
+        async function saveScriptEdit() {
+            const name     = document.getElementById("editName")?.value?.trim();
+            const sql      = document.getElementById("editSql")?.value;
+            const rollback = document.getElementById("editRollback")?.value;
+            if (!name || !sql?.trim()) { showToast("Ad ve SQL zorunludur.", "error"); return; }
+
+            const res = await fetch(__scriptUpdateUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ scriptId: @Model.ScriptId, name, sqlScript: sql, rollbackScript: rollback || null })
+            });
+            let data = null;
+            try { data = await res.json(); } catch { /* ignore */ }
+            if (!res.ok || data?.success === false) {
+                showToast(data?.message || "Güncellenemedi.", "error"); return;
+            }
+            showToast("Script güncellendi.", "success");
+            // Görüntülenen alanları güncelle
+            const h1 = document.querySelector(".page-title");
+            if (h1) h1.textContent = name;
+            const sqlBlock = document.getElementById("sqlBlock");
+            if (sqlBlock) sqlBlock.textContent = sql;
+            const rbBlock = document.getElementById("rbBlock");
+            if (rbBlock) rbBlock.textContent = rollback || "";
+            document.getElementById("editScriptPanel").style.display = "none";
         }
 
         const __scriptDeleteUrl = "@Url.Action("Delete", "Scripts")";

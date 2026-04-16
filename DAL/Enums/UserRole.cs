@@ -9,7 +9,6 @@ namespace DAL.Enums
     public enum UserRole
     {
         Developer = 1,
-        Admin = 2,
-        Tester = 3
+        Admin = 2
     }
 }

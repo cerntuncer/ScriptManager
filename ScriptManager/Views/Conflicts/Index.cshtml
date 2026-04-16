@@ -31,10 +31,10 @@
                     <th></th>
                 </tr>
                 </thead>
-                <tbody>
+                <tbody id="conflictTableBody">
                 @foreach (var r in Model.Rows)
                 {
-                    <tr>
+                    <tr data-conflict-id="@r.ConflictId" data-filter-hidden="0">
                         <td><span class="badge text-bg-warning text-dark">@r.TableName</span></td>
                         <td>
                             <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })">@r.ScriptName</a>
@@ -72,6 +72,8 @@
         }));
     </script>
     <script>
+        setupPagination("conflictTableBody", 15);
+
         async function resolveConflict(conflictId) {
             const res = await fetch("@Url.Action("Resolve", "Conflicts")", {
                 method: "POST",
@@ -79,15 +81,25 @@
                 body: JSON.stringify({ conflictId })
             });
             let data = null;
-            try {
-                data = await res.json();
-            } catch (_) {}
+            try { data = await res.json(); } catch (_) {}
             if (!res.ok || !data || data.success === false) {
                 showToast(data?.message || "İşlem başarısız.", "error");
                 return;
             }
             showToast(data?.message || "Tamam.", "success");
-            window.location.reload();
+            const tr = document.querySelector(`tr[data-conflict-id="${conflictId}"]`);
+            if (tr) {
+                tr.remove();
+                window.__pgState?.["conflictTableBody"]?.refresh();
+                // başlıktaki sayacı güncelle
+                const h3 = document.querySelector(".panel-header h3");
+                if (h3) {
+                    const remaining = document.querySelectorAll("#conflictTableBody tr").length;
+                    h3.textContent = `Açık çakışmalar (${remaining})`;
+                }
+            } else {
+                window.location.reload();
+            }
         }
     </script>
 }

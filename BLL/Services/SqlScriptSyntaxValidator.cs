@@ -42,6 +42,8 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
 
         AppendHeuristicBareBatchIssues(batches, prefix, issues);
 
+        AppendMysqlDialectHints(batches, prefix, issues);
+
         var dom = ValidateWithScriptDom(batches, prefix);
         issues.AddRange(dom.Issues);
 
@@ -105,6 +107,55 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         }
     }
 
+    /// <summary>
+    /// MySQL / PostgreSQL sözdizimleri tespit edildiğinde T-SQL karşılığını öneren uyarılar üretir.
+    /// </summary>
+    private static void AppendMysqlDialectHints(
+        IReadOnlyList<string> batches,
+        string prefix,
+        List<SqlScriptSyntaxIssue> issues)
+    {
+        // keyword → T-SQL karşılığı hint
+        var hints = new (Regex Pattern, string Hint)[]
+        {
+            (new Regex(@"\bAUTO_INCREMENT\b", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: AUTO_INCREMENT T-SQL'de desteklenmez. Yerine IDENTITY(1,1) kullanın. Örn: Id INT PRIMARY KEY IDENTITY(1,1)"),
+            (new Regex(@"\bENGINE\s*=", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: ENGINE= T-SQL'de gerekli değildir."),
+            (new Regex(@"\bDEFAULT\s+CHARSET\b", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: DEFAULT CHARSET T-SQL'de kullanılmaz."),
+            (new Regex(@"\bUNSIGNED\b", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: UNSIGNED T-SQL'de desteklenmez. Negatif değerleri kısıtlamak için CHECK kısıtı kullanın."),
+            (new Regex(@"\bLIMIT\s+\d+\b", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: LIMIT T-SQL'de desteklenmez. Yerine TOP veya OFFSET/FETCH NEXT kullanın."),
+            (new Regex(@"\bIFNULL\s*\(", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: IFNULL() T-SQL'de ISNULL() veya COALESCE() ile yapılır."),
+            (new Regex(@"\bGROUP_CONCAT\s*\(", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                "MySQL sözdizimi: GROUP_CONCAT() T-SQL'de STRING_AGG() ile yapılır."),
+        };
+
+        for (var i = 0; i < batches.Count; i++)
+        {
+            var batchText = batches[i];
+            if (string.IsNullOrWhiteSpace(batchText)) continue;
+
+            foreach (var (pattern, hint) in hints)
+            {
+                if (pattern.IsMatch(batchText))
+                {
+                    issues.Add(new SqlScriptSyntaxIssue
+                    {
+                        Source = prefix,
+                        BatchNumber = i + 1,
+                        Line = 0,
+                        Column = 0,
+                        Message = $"⚠ {hint}"
+                    });
+                }
+            }
+        }
+    }
+
     private static List<SqlScriptSyntaxIssue> DeduplicateIssues(List<SqlScriptSyntaxIssue> issues)
     {
         var seen = new HashSet<string>();
@@ -119,8 +170,15 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         return list;
     }
 
+    /// CREATE/ALTER PROCEDURE, VIEW, FUNCTION, TRIGGER gibi DDL'ler bir batch'te
+    /// ilk statement olmak zorunda — SET NOEXEC ON öncesine koyulamaz; bu batches atlanır.
+    private static readonly Regex DdlFirstStatementPattern = new(
+        @"^\s*(CREATE|ALTER)\s+(OR\s+ALTER\s+)?(PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// Her batch: <c>SET NOEXEC ON</c> + metin tek <see cref="SqlCommand"/> içinde (derleme hataları; geçersiz veri türü adları dahil).
+    /// DDL batches (PROCEDURE/VIEW/FUNCTION/TRIGGER) ScriptDom tarafından zaten kontrol edildiğinden atlanır.
     /// </summary>
     private SqlScriptSyntaxResult? TryValidateWithSqlServerNoExec(IReadOnlyList<string> batches, string prefix)
     {
@@ -136,6 +194,10 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
                 {
                     var batchText = batches[i];
                     if (string.IsNullOrWhiteSpace(batchText))
+                        continue;
+
+                    // CREATE/ALTER PROCEDURE, VIEW, FUNCTION, TRIGGER → NOEXEC wrap yasak
+                    if (DdlFirstStatementPattern.IsMatch(batchText))
                         continue;
 
                     var batchNumber = i + 1;

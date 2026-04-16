@@ -28,7 +28,7 @@ namespace ScriptManager.Controllers
 
         public async Task<IActionResult> Index()
         {
-            ViewData["Title"] = "Releases";
+            ViewData["Title"] = "Sürümler";
             ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
             ViewBag.CanWrite = AuthHelper.CanWriteOperational(User);
             var vm = new ReleasesIndexViewModel
@@ -187,6 +187,7 @@ namespace ScriptManager.Controllers
                 {
                     Name = body.Name.Trim(),
                     Version = body.Version.Trim(),
+                    Description = string.IsNullOrWhiteSpace(body.Description) ? null : body.Description.Trim(),
                     CreatedBy = createdBy,
                     CreatedAt = DateTime.UtcNow,
                     IsDeleted = false,
@@ -204,6 +205,23 @@ namespace ScriptManager.Controllers
                         return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Seçilen kayıt kök yetim klasör değil." });
                     if (!await BatchTreeHelper.EntireSubtreeIsOrphanAsync(_db, rootId))
                         return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Seçilen ağaç başka release'e bağlı." });
+
+                    // Versiyon içindeki tüm scriptler Hazır olmalı
+                    var allBatchIds = await BatchTreeHelper.CollectSubtreeIdsAsync(_db, rootId);
+                    var notReadyCount = await _db.Scripts
+                        .CountAsync(s => !s.IsDeleted
+                            && s.Status != ScriptStatus.Deleted
+                            && s.BatchId.HasValue && allBatchIds.Contains(s.BatchId.Value)
+                            && s.Status != ScriptStatus.Ready);
+                    if (notReadyCount > 0)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new CreateReleaseJsonResponse
+                        {
+                            Success = false,
+                            Message = $"Versiyonda {notReadyCount} Taslak/Çakışma durumunda script var. Sürüm oluşturmadan önce tüm scriptler Hazır olmalı."
+                        });
+                    }
 
                     await BatchTreeHelper.PropagateReleaseIdAsync(_db, rootId, release.Id);
                     release.RootBatchId = rootId;

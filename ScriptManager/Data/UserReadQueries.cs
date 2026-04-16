@@ -34,7 +34,6 @@ public static class UserReadQueries
         {
             UserRole.Admin => "Yönetici",
             UserRole.Developer => "Geliştirici",
-            UserRole.Tester => "Testçi",
             _ => role.ToString()
         };
 
@@ -42,11 +41,9 @@ public static class UserReadQueries
         role switch
         {
             UserRole.Developer =>
-                "Script oluşturur (Taslak). Testçiye gönderir veya test atlayarak doğrudan Hazır yapar. Hazır olmayan script release’e eklenemez.",
-            UserRole.Tester =>
-                "Yalnızca İncelemede (test) durumundaki scriptleri Hazır onayına alır; taslak veya release seçimi yapmaz.",
+                "Script oluşturur (Taslak) ve Hazır durumuna alır. Hazır olmayan script release'e eklenemez.",
             UserRole.Admin =>
-                "Kullanıcılar, sürümler ve çoğu yönetim. Script durumunda: geliştirici kurallarına benzer (test onayı yalnız testçide).",
+                "Kullanıcılar, sürümler ve tüm yönetim işlemleri. Script durumunu değiştirebilir.",
             _ => "—"
         };
 }

@@ -1,14 +1,17 @@
 @model ScriptManager.Models.Script.ScriptsIndexViewModel
 @using System.Text.Json
 @using ScriptManager.Security
+@using DAL.Enums
 @{
-    var canAuthor = ViewBag.CanAuthorScripts as bool? == true;
+    var canAuthor    = ViewBag.CanAuthorScripts as bool? == true;
+    var isAdmin      = ViewBag.IsAdmin as bool? == true;
+    var actorUserId  = ViewBag.ActorUserId as long? ?? 0L;
 }
 
 <div class="page-head">
     <div>
-        <h1 class="page-title">Scripts</h1>
-        <p class="page-sub text-muted mb-0 small">Klasör yapısı <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a> üzerinden kurulur; script eklerken seçtiğin klasöre doğrudan eklenir. Release için <a href="@Url.Action("Index", "Releases")">Releases</a>.</p>
+        <h1 class="page-title">Scriptler</h1>
+        <p class="page-sub text-muted mb-0 small">Klasör yapısı <a href="@Url.Action("Index", "Batches")">Versiyonlar</a> üzerinden kurulur; script eklerken seçtiğin klasöre doğrudan eklenir. Sürüm oluşturmak için <a href="@Url.Action("Index", "Releases")">Sürümler</a>.</p>
     </div>
     @if (canAuthor)
     {
@@ -43,9 +46,25 @@
             <tbody id="scriptTableBody">
                 @foreach (var item in Model.Scripts)
                 {
-                    <tr>
-                        <td>@item.Name</td>
-                        <td>@item.StatusDisplay</td>
+                    var canMarkReady = item.StatusEnum == ScriptStatus.Draft
+                                       && (isAdmin || item.DeveloperId == actorUserId);
+                    var statusBadgeCls = item.StatusEnum switch {
+                        ScriptStatus.Ready    => "script-badge script-badge--ready",
+                        ScriptStatus.Draft    => "script-badge script-badge--draft",
+                        ScriptStatus.Conflict => "script-badge script-badge--conflict",
+                        _                     => "script-badge"
+                    };
+                    <tr data-filter-hidden="0">
+                        <td><a href="@Url.Action("Detail", "Scripts", new { id = item.ScriptId })" class="table-link">@item.Name</a></td>
+                        <td>
+                            <span class="@statusBadgeCls">@item.StatusDisplay</span>
+                            @if (canMarkReady)
+                            {
+                                <button type="button" class="btn-inline-ready"
+                                        onclick="markScriptReadyInline(@item.ScriptId, this)"
+                                        title="Hazır olarak işaretle">✓</button>
+                            }
+                        </td>
                         <td>@item.BatchName</td>
                         <td>@item.DeveloperName</td>
                         <td>@(item.HasRollback ? "Var" : "—")</td>
@@ -71,6 +90,7 @@
             createWizardContext = Url.Action("CreateWizardContext", "Scripts"),
             create = Url.Action("Create", "Scripts"),
             validateSql = Url.Action("ValidateSql", "Scripts"),
+            changeStatus = Url.Action("ChangeStatus", "Scripts"),
             batchesIndex = Url.Action("Index", "Batches"),
             developerOptions = Url.Action("DeveloperOptions", "Scripts"),
             addPoolFolder = Url.Action("AddPoolFolder", "Batches"),
@@ -81,5 +101,6 @@
         }));
         window.__scriptCreateUrls = window.__scriptsPageUrls;
         setupTableFilter("scriptFilterInput", "#scriptTable tbody tr");
+        setupPagination("scriptTableBody", 15);
     </script>
 }

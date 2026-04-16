@@ -14,7 +14,6 @@ public static class ScriptReadQueries
         s switch
         {
             ScriptStatus.Draft => "Taslak",
-            ScriptStatus.Testing => "İncelemede (test)",
             ScriptStatus.Ready => "Hazır",
             ScriptStatus.Conflict => "Çakışma",
             ScriptStatus.Deleted => "Silindi",
@@ -94,6 +93,9 @@ public static class ScriptReadQueries
     public static ScriptListItemViewModel ToListItem(Script s)
     {
         var cacheSummary = SqlCacheBustAnalyzer.SummaryLabel(s.SqlScript, s.RollbackScript);
+        var tables = SqlReferencedTableExtractor.ExtractTables(s.SqlScript);
+        tables.UnionWith(SqlReferencedTableExtractor.ExtractTables(s.RollbackScript));
+        var tablesDisplay = tables.Count > 0 ? string.Join(", ", tables.OrderBy(t => t)) : string.Empty;
         return new ScriptListItemViewModel
         {
             ScriptId = s.Id,
@@ -110,7 +112,8 @@ public static class ScriptReadQueries
             CreatedAt = s.CreatedAt,
             HasRollback = !string.IsNullOrWhiteSpace(s.RollbackScript),
             HasCacheBustHints = cacheSummary != null,
-            CacheBustSummary = cacheSummary
+            CacheBustSummary = cacheSummary,
+            ReferencedTablesDisplay = tablesDisplay
         };
     }
 
@@ -246,6 +249,7 @@ public static class ReleaseReadQueries
                 ReleaseId = release.Id,
                 ReleaseName = release.Name,
                 Version = release.Version,
+                Description = release.Description,
                 CombinedSql = string.Empty,
                 CombinedRollback = string.Empty,
                 Scripts = new List<ReleaseScriptItemViewModel>(),
@@ -355,6 +359,7 @@ public static class ReleaseReadQueries
             ReleaseId = release.Id,
             ReleaseName = release.Name,
             Version = release.Version,
+            Description = release.Description,
             CombinedSql = combinedSql,
             CombinedRollback = combinedRb,
             Scripts = scriptRows,

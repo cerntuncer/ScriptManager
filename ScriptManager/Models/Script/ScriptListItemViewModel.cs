@@ -24,5 +24,6 @@ namespace ScriptManager.Models.Script
         public bool HasCacheBustHints { get; set; }
         public string? CacheBustSummary { get; set; }
 
+        public string ReferencedTablesDisplay { get; set; } = string.Empty;
     }
 }

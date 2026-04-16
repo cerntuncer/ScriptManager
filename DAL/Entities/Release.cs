@@ -7,6 +7,7 @@ namespace DAL.Entities
     {
         public string Name { get; set; } = null!;
         public string Version { get; set; } = null!;
+        public string? Description { get; set; }
         public long CreatedBy { get; set; }
         public bool IsActive { get; set; }
 

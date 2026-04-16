@@ -54,8 +54,10 @@ namespace ScriptManager.Controllers
 
         public async Task<IActionResult> Index()
         {
-            ViewData["Title"] = "Scripts";
+            ViewData["Title"] = "Scriptler";
             ViewBag.CanAuthorScripts = AuthHelper.CanAuthorScripts(User);
+            ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
+            ViewBag.ActorUserId = AuthHelper.GetUserId(User) ?? 0L;
             var scripts = await ScriptReadQueries.ListActiveScriptsAsync(_db);
             return View(new ScriptsIndexViewModel { Scripts = scripts });
         }
@@ -68,6 +70,37 @@ namespace ScriptManager.Controllers
             {
                 developers = developers.Select(d => new { id = d.UserId, name = d.Name, email = d.Email })
             });
+        }
+
+        /// <summary>Topbar global arama — script adı, developer, versiyon üzerinden arar.</summary>
+        [HttpGet]
+        public async Task<IActionResult> QuickSearch([FromQuery] string? q)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+                return Json(new { results = Array.Empty<object>() });
+
+            var term = q.Trim().ToLower();
+
+            var scripts = await _db.Scripts.AsNoTracking()
+                .Include(s => s.Developer)
+                .Include(s => s.Batch)
+                .Where(s => !s.IsDeleted && s.Status != ScriptStatus.Deleted
+                    && (s.Name.ToLower().Contains(term)
+                        || (s.Developer != null && s.Developer.Name.ToLower().Contains(term))
+                        || (s.Batch != null && s.Batch.Name.ToLower().Contains(term))))
+                .OrderByDescending(s => s.CreatedAt)
+                .Take(7)
+                .Select(s => new
+                {
+                    id = s.Id,
+                    name = s.Name,
+                    developer = s.Developer != null ? s.Developer.Name : "",
+                    batch = s.Batch != null ? s.Batch.Name : "",
+                    status = s.Status.ToString()
+                })
+                .ToListAsync();
+
+            return Json(new { results = scripts });
         }
 
         /// <summary>Release / batch modallarında mevcut script çoklu seçimi.</summary>
@@ -129,9 +162,7 @@ namespace ScriptManager.Controllers
             ViewBag.ActorRole = actor?.Role;
             ViewBag.ActorUserId = actorId;
             ViewBag.CanChangeScriptStatus = actor != null &&
-                (actor.Role == UserRole.Admin ||
-                 actor.Role == UserRole.Developer ||
-                 actor.Role == UserRole.Tester);
+                (actor.Role == UserRole.Admin || actor.Role == UserRole.Developer);
 
             ViewData["Title"] = $"Script — {model.Name}";
             return View(model);
@@ -239,6 +270,35 @@ namespace ScriptManager.Controllers
                 CreatedAtDisplay = DateTime.UtcNow.ToLocalTime().ToString("dd.MM.yyyy"),
                 CanDelete = AuthHelper.CanDeleteScript(User, developerId)
             });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> Update([FromBody] UpdateScriptFormRequest? body)
+        {
+            if (body == null || body.ScriptId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            if (string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.SqlScript))
+                return BadRequest(new { success = false, message = "Ad ve SQL zorunludur." });
+
+            var script = await _db.Scripts.FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted);
+            if (script == null)
+                return NotFound(new { success = false, message = "Script bulunamadı." });
+
+            if (script.Status != ScriptStatus.Draft)
+                return BadRequest(new { success = false, message = "Sadece Taslak durumdaki scriptler düzenlenebilir." });
+
+            if (!AuthHelper.CanDeleteScript(User, script.DeveloperId))
+                return StatusCode(403, new { success = false, message = "Bu scripti düzenleme yetkiniz yok." });
+
+            script.Name = body.Name.Trim();
+            script.SqlScript = body.SqlScript;
+            script.RollbackScript = string.IsNullOrWhiteSpace(body.RollbackScript) ? null : body.RollbackScript;
+
+            await _db.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Script güncellendi." });
         }
 
         [HttpPost]

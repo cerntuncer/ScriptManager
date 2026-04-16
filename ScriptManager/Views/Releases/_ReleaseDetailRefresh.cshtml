@@ -24,23 +24,9 @@
             {
                 <span class="badge text-bg-warning text-dark small">İptal edildi</span>
             }
-            @if (treeLocked && !Model.IsCancelled)
+            else
             {
                 <span class="badge text-bg-secondary small">Kilitli</span>
-            }
-            @if (canWrite && treeLocked && !Model.IsCancelled)
-            {
-                <button type="button" class="btn btn-sm btn-warning text-dark"
-                        onclick="postReleaseTreeLock(@Model.ReleaseId, false)">Düzenlemeye aç</button>
-            }
-            @if (canWrite && !treeLocked && Model.FolderTree.Count > 0 && !Model.IsCancelled)
-            {
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        onclick="postReleaseTreeLock(@Model.ReleaseId, true)">Ağacı kilitle</button>
-                <button type="button" class="btn btn-sm btn-primary"
-                        onclick="openReleaseDetailAddScriptModal()">Script ekle</button>
-                <button type="button" class="btn btn-sm btn-outline-primary"
-                        onclick="openReleaseDetailAddSubbatchModal()">Alt klasör</button>
             }
         </div>
     </div>
@@ -48,7 +34,7 @@
         @if (Model.IsCancelled)
         {
             <p class="alert alert-secondary small mb-0">
-                Bu sürüm kaydı iptal edilmiştir; klasörler <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a> sayfasına dönmüş ve kilitleri açılmıştır.
+                Bu sürüm kaydı iptal edilmiştir; klasörler <a href="@Url.Action("Index", "Batches")">Versiyonlar</a> sayfasına dönmüş ve kilitleri açılmıştır.
             </p>
         }
         else if (Model.FolderTree.Count == 0)
@@ -89,7 +75,7 @@
                 <tbody>
                 @foreach (var s in Model.Scripts)
                 {
-                    var mayPick = isAdmin || User.IsInRole("Tester") || (currentUserId.HasValue && s.DeveloperId == currentUserId.Value);
+                    var mayPick = isAdmin || (currentUserId.HasValue && s.DeveloperId == currentUserId.Value);
                     <tr>
                         <td>
                             @if (mayPick)

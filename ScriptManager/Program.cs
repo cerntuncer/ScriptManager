@@ -63,15 +63,6 @@ if (app.Environment.IsDevelopment())
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     IsDeleted = false
-                },
-                new User
-                {
-                    Name = "Yerel testçi",
-                    Email = "tester@localhost",
-                    Role = UserRole.Tester,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
                 });
             await db.SaveChangesAsync();
         }

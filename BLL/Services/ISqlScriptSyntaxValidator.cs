@@ -1,8 +1,8 @@
 namespace BLL.Services;
 
-/// <summary>
-/// T-SQL: mümkünse SQL Server <c>NOEXEC</c> (derleme), aksi halde ScriptDom (GO ile batch'ler).
-/// </summary>
+
+// T-SQL: mümkünse SQL Server <c>NOEXEC</c> (derleme), aksi halde ScriptDom (GO ile batch'ler).
+
 public interface ISqlScriptSyntaxValidator
 {
     /// <param name="labelPrefix">Örn. "SQL" veya "Rollback"</param>
@@ -24,7 +24,7 @@ public sealed class SqlScriptSyntaxIssue
     public string Message { get; init; } = "";
 }
 
-/// <summary>ValidateSql endpoint gövdesi (MVC + API).</summary>
+//ValidateSql endpoint gövdesi (MVC + API)
 public sealed class SqlSyntaxValidationRequest
 {
     public string? SqlScript { get; set; }

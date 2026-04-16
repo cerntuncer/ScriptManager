@@ -62,14 +62,16 @@ public static class PoolBatchQueries
             foreach (var c in children)
                 childDtos.Add(await BuildNode(c.Id));
 
+            var isRoot = !row.ParentBatchId.HasValue;
             return new PoolBatchTreeNodeDto
             {
                 BatchId = nodeId,
                 Name = row.Name,
                 IsLocked = row.IsLocked,
-                CanAddScript = !row.IsLocked && !hasChildSet.Contains(nodeId) && !inLockedRelease,
-                CanAddChild = !row.IsLocked && !scriptBatchSet.Contains(nodeId) && !inLockedRelease,
+                CanAddScript = !row.IsLocked && !hasChildSet.Contains(nodeId),
+                CanAddChild = !row.IsLocked && !scriptBatchSet.Contains(nodeId),
                 CanPackageRelease = pkgOk,
+                CanDelete = isRoot && !row.IsLocked && !row.ReleaseId.HasValue,
                 LinkedReleaseId = inLockedRelease ? row.ReleaseId : null,
                 LinkedReleaseVersion = inLockedRelease ? relVer : null,
                 Children = childDtos

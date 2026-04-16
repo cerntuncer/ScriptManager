@@ -7,6 +7,7 @@
         public long ReleaseId { get; set; }
         public string ReleaseName { get; set; } = string.Empty;
         public string Version { get; set; }
+        public string? Description { get; set; }
         public string CombinedSql { get; set; }
         public string CombinedRollback { get; set; }
         public List<ReleaseScriptItemViewModel> Scripts { get; set; } = new();

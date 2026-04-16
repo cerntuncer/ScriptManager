@@ -1,4 +1,4 @@
-@model ScriptManager.Models.User.UsersIndexViewModel
+﻿@model ScriptManager.Models.User.UsersIndexViewModel
 @{
     var actorId = ViewBag.ActorUserId as long? ?? 0L;
 }
@@ -7,9 +7,8 @@
     <div>
         <h1 class="page-title">Kullanıcılar</h1>
         <p class="page-sub text-muted mb-0 small">
-            Roller iş akışını belirler: <strong>Geliştirici</strong> taslak ve Hazır/test gönderimi;
-            <strong>Testçi</strong> yalnızca &quot;İncelemede&quot; scripti <strong>Hazır</strong> yapar;
-            <strong>Yönetici</strong> kullanıcıları ve pasif/aktif durumunu yönetir. Release’e yalnızca <strong>Hazır</strong> scriptler seçilebilir.
+            <strong>Geli\u015ftirici</strong> kendi scriptlerini taslak'tan Haz\u0131r durumuna ge\u00e7irebilir.
+            <strong>Y\u00f6netici</strong> kullan\u0131c\u0131lar\u0131 ve t\u00fcm y\u00f6netim i\u015flemlerini yapabilir. Sürüme yaln\u0131zca <strong>Haz\u0131r</strong> scriptler se\u00e7ilebilir.
         </p>
     </div>
 </div>
@@ -45,10 +44,10 @@
                         <th></th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="userTableBody">
                     @foreach (var u in Model.Users)
                     {
-                        <tr data-user-id="@u.UserId">
+                        <tr data-user-id="@u.UserId" data-filter-hidden="0">
                             <td>@u.Name</td>
                             <td>@u.Email</td>
                             <td>@u.Role</td>
@@ -94,6 +93,7 @@
     {
         <script>
             setupTableFilter("userFilterInput", "#userTable tbody tr");
+            setupPagination("userTableBody", 15);
         </script>
     }
     <script>
@@ -105,15 +105,31 @@
                 body: JSON.stringify({ userId, isActive })
             });
             let data = null;
-            try {
-                data = await res.json();
-            } catch (_) {}
+            try { data = await res.json(); } catch (_) {}
             if (!res.ok || data?.success === false) {
                 showToast(data?.message || "İşlem başarısız.", "error");
                 return;
             }
             showToast(data?.message || "Tamam.", "success");
-            window.location.reload();
+            const tr = document.querySelector(`tr[data-user-id="${userId}"]`);
+            if (tr) {
+                // Hesap durumu badge (4. sütun, index 3)
+                const badgeTd = tr.cells[3];
+                if (badgeTd) {
+                    badgeTd.innerHTML = isActive
+                        ? '<span class="badge text-bg-success">Aktif</span>'
+                        : '<span class="badge text-bg-secondary">Pasif</span>';
+                }
+                // Aksiyon butonu (son sütun)
+                const actionTd = tr.cells[tr.cells.length - 1];
+                if (actionTd) {
+                    actionTd.innerHTML = isActive
+                        ? `<button type="button" class="btn btn-sm btn-outline-warning" onclick="setUserActive(${userId}, false)">Pasifleştir</button>`
+                        : `<button type="button" class="btn btn-sm btn-outline-success" onclick="setUserActive(${userId}, true)">Aktifleştir</button>`;
+                }
+            } else {
+                window.location.reload();
+            }
         }
     </script>
 }

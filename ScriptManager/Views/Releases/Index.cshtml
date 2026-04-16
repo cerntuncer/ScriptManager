@@ -9,41 +9,32 @@
 
 <div class="page-head">
     <div>
-        <h1 class="page-title">Releases</h1>
-        <p class="page-sub text-muted mb-0 small">Release oluştururken klasör ağacındaki onaylı ana kök klasörlerden biri seçilir. Klasör hazırlığı için <a href="@Url.Action("Index", "Batches")">Klasör Ağacı</a>.</p>
+        <h1 class="page-title">Sürümler</h1>
+        <p class="page-sub text-muted mb-0 small">Production'a gidecek deployment paketi. Seçilen versiyonlar kilitlenir ve tek bir SQL dosyasına export edilir.</p>
     </div>
     @if (canWrite)
     {
         <div class="page-actions">
-            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openCreateReleaseModal()">Yeni release</button>
+            <button type="button" class="btn btn-primary modern-btn text-white" onclick="openCreateReleaseModal()">Yeni sürüm</button>
         </div>
     }
 </div>
 
 <div class="panel-card">
-    <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <h3 class="mb-0">Release listesi</h3>
-        @if (isAdmin)
-        {
-            <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="bulkCancelSelectedReleases()">Seçilenleri iptal et</button>
-        }
+    <div class="panel-header">
+        <h3 class="mb-0">Sürüm listesi</h3>
     </div>
 
     <div class="table-toolbar">
-        <input id="releaseFilterInput" class="table-filter-input" placeholder="Versiyon ara..." />
+        <input id="releaseFilterInput" class="table-filter-input" placeholder="Sürüm ara..." />
     </div>
 
     <div class="table-wrap custom-scroll">
         <table class="modern-table" id="releaseTable">
             <thead>
                 <tr>
-                    @if (isAdmin)
-                    {
-                        <th class="w-1"><input type="checkbox" id="releaseSelectAll" title="Tümünü seç" /></th>
-                    }
                     <th>Durum</th>
-                    <th>Release</th>
-                    <th>Versiyon</th>
+                    <th>Sürüm</th>
                     <th>Script</th>
                     <th>Rollback</th>
                     <th>Oluşturulma</th>
@@ -53,16 +44,7 @@
             <tbody id="releaseTableBody">
                 @foreach (var item in Model.Releases)
                 {
-                    <tr>
-                        @if (isAdmin)
-                        {
-                            <td>
-                                @if (!item.IsCancelled)
-                                {
-                                    <input type="checkbox" class="release-row-cb form-check-input" value="@item.ReleaseId" />
-                                }
-                            </td>
-                        }
+                    <tr data-release-id="@item.ReleaseId" data-filter-hidden="0">
                         <td>
                             @if (item.IsCancelled)
                             {
@@ -74,7 +56,6 @@
                             }
                         </td>
                         <td>@item.Name</td>
-                        <td>@item.Version</td>
                         <td>@item.ScriptCount</td>
                         <td>@item.RollbackScriptCount</td>
                         <td>@item.CreatedAt.ToString("dd.MM.yyyy HH:mm")</td>
@@ -96,15 +77,47 @@
             developerOptions = Url.Action("DeveloperOptions", "Scripts"),
             treeChildren = Url.Action("TreeChildren", "Batches"),
             detailUrlPlaceholder = Url.Action("Detail", "Releases", new { id = 999999999L }),
-            bulkCancel = Url.Action("BulkCancel", "Releases")
+            bulkCancel = Url.Action("BulkCancel", "Releases"),
+            cancelOne = Url.Action("CancelOne", "Releases")
         }));
     </script>
     <script>
         setupTableFilter("releaseFilterInput", "#releaseTable tbody tr");
+        setupPagination("releaseTableBody", 15);
         document.getElementById("releaseSelectAll")?.addEventListener("change", function () {
             const on = this.checked;
             document.querySelectorAll(".release-row-cb").forEach((cb) => (cb.checked = on));
         });
+
+        async function cancelOneRelease(id) {
+            const url = window.__releaseCreateUrls?.cancelOne;
+            if (!url) { showToast("İptal adresi tanımsız.", "error"); return; }
+            if (!confirm("Bu sürüm iptal edilecek; klasörler genel alana döner, kayıt silinmez. Devam?")) return;
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ releaseId: id })
+            });
+            let data = null;
+            try { data = await res.json(); } catch (_) {}
+            if (!res.ok || data?.success === false) {
+                showToast(data?.message || "İptal edilemedi.", "error");
+                return;
+            }
+            showToast(data?.message || "Tamam.", "success");
+            const tr = document.querySelector(`tr[data-release-id="${id}"]`);
+            if (tr) {
+                // Status hücresini güncelle
+                const statusTd = Array.from(tr.cells).find(td => td.querySelector(".text-muted.small, .badge"));
+                if (statusTd) statusTd.innerHTML = '<span class="badge text-bg-secondary small">İptal</span>';
+                // Checkbox'ı kaldır (iptal edilmiş satır seçilemez)
+                tr.querySelector(".release-row-cb")?.closest("td")?.replaceChildren();
+                // İptal butonunu kaldır
+                tr.querySelector(`button[onclick="cancelOneRelease(${id})"]`)?.remove();
+            } else {
+                window.location.reload();
+            }
+        }
 
         async function bulkCancelSelectedReleases() {
             const url = window.__releaseCreateUrls?.bulkCancel;

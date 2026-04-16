@@ -7,20 +7,9 @@ namespace ScriptManager.Models.Dashboard
         public int TotalReleases { get; set; }
         public int TotalScripts { get; set; }
         public int OpenConflicts { get; set; }
-        public int ScriptsWithCacheHints { get; set; }
         public int ReadyScripts { get; set; }
-        public int TestingScripts { get; set; }
         public int DraftScripts { get; set; }
         public int OtherScripts { get; set; }
         public List<ReleaseListItemViewModel> LatestReleases { get; set; } = new();
-        public List<AlertItemViewModel> Alerts { get; set; } = new();
-
     }
-    public class AlertItemViewModel
-    {
-        public int Severity { get; set; }
-        public string Message { get; set; }
-
-    }
-
 }

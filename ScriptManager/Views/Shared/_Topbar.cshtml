@@ -3,13 +3,13 @@
         <button id="sidebarToggle" class="icon-btn d-lg-none" type="button">☰</button>
 
         <div class="search-box">
-            <input id="globalSearchInput" type="text" class="search-input" placeholder="Search..." />
+            <input id="globalSearchInput" type="text" class="search-input" placeholder="Script ara..." autocomplete="off" />
             <div id="globalSearchResult" class="search-result-panel d-none"></div>
         </div>
     </div>
 
     <div class="topbar-right">
-        <button class="icon-btn" type="button" aria-label="Bildirimler">🔔</button>
+        @await Component.InvokeAsync("ConflictCount")
         @await Component.InvokeAsync("UserMenu")
     </div>
 </div>
