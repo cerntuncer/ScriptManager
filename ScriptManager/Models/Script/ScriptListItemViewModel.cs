@@ -21,9 +21,6 @@ namespace ScriptManager.Models.Script
         public DateTime CreatedAt { get; set; }
         public bool HasRollback { get; set; }
 
-        public bool HasCacheBustHints { get; set; }
-        public string? CacheBustSummary { get; set; }
-
         public string ReferencedTablesDisplay { get; set; } = string.Empty;
     }
 }

@@ -38,7 +38,6 @@ public static class ScriptReadQueries
         var tables = SqlReferencedTableExtractor.ExtractTables(s.SqlScript);
         tables.UnionWith(SqlReferencedTableExtractor.ExtractTables(s.RollbackScript));
         var tablesDisplay = tables.Count > 0 ? string.Join(", ", tables.OrderBy(t => t)) : "—";
-        var cacheSummary = SqlCacheBustAnalyzer.SummaryLabel(s.SqlScript, s.RollbackScript);
         return new ReleaseScriptItemViewModel
         {
             ScriptId = s.Id,
@@ -50,9 +49,7 @@ public static class ScriptReadQueries
             RollbackScript = s.RollbackScript,
             DeveloperId = s.DeveloperId,
             DeveloperName = s.Developer?.Name ?? string.Empty,
-            ReferencedTablesDisplay = tablesDisplay,
-            HasCacheBustHints = cacheSummary != null,
-            CacheBustSummary = cacheSummary
+            ReferencedTablesDisplay = tablesDisplay
         };
     }
 
@@ -92,7 +89,6 @@ public static class ScriptReadQueries
 
     public static ScriptListItemViewModel ToListItem(Script s)
     {
-        var cacheSummary = SqlCacheBustAnalyzer.SummaryLabel(s.SqlScript, s.RollbackScript);
         var tables = SqlReferencedTableExtractor.ExtractTables(s.SqlScript);
         tables.UnionWith(SqlReferencedTableExtractor.ExtractTables(s.RollbackScript));
         var tablesDisplay = tables.Count > 0 ? string.Join(", ", tables.OrderBy(t => t)) : string.Empty;
@@ -111,8 +107,6 @@ public static class ScriptReadQueries
             StatusDisplay = ScriptStatusDisplay(s.Status),
             CreatedAt = s.CreatedAt,
             HasRollback = !string.IsNullOrWhiteSpace(s.RollbackScript),
-            HasCacheBustHints = cacheSummary != null,
-            CacheBustSummary = cacheSummary,
             ReferencedTablesDisplay = tablesDisplay
         };
     }

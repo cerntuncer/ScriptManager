@@ -105,6 +105,23 @@ function initGlobalSearch() {
     });
 }
 
+/** DB'deki conflict key'ini okunabilir etikete çevirir. Örn: "DDL:USERS" → "Tablo: USERS" */
+function conflictLabel(key) {
+    if (!key) return key || "";
+    const parts = key.split(":");
+    if (parts.length < 2) return key;
+    const code = parts[0].toUpperCase();
+    const obj  = parts[1];
+    const sub  = parts.length > 2 ? parts[2] : null;
+    switch (code) {
+        case "RECORD": return sub ? `Kayıt: ${obj} = ${sub}` : `Kayıt: ${obj}`;
+        case "DDL":    return `Tablo: ${obj}`;
+        case "OBJ":    return `Nesne: ${obj}`;
+        case "DML":    return `DML: ${obj}`;
+        default:       return key;
+    }
+}
+
 function escHtml(str) {
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
@@ -344,24 +361,27 @@ async function openConflictReviewModal(conflictId) {
     }
     const a = d.scriptA;
     const b = d.scriptB;
-    const title = `İncele — ${d.tableName || "çakışma"}`;
+    const title = `İncele — ${conflictLabel(d.tableName) || "çakışma"}`;
 
     const col = (side, cls) => {
         const ro = !side.canEdit;
         const roAttr = ro ? "readonly" : "";
+        const badge = ro ? "" : `<span id="${cls}-val-badge" class="sw-sql-badge sw-sql-badge--idle ms-2">— kontrol bekleniyor</span>`;
+        const valBox = ro ? "" : `<div id="${cls}-val-box" class="alert d-none small mb-0 mt-1 py-2" role="status"></div>`;
         return `<div class="col-lg-6">
             <h6 class="mb-1">${escapeHtml(side.name || "")}</h6>
             <div class="small text-muted mb-2">${escapeHtml(side.developer || "")}${ro ? " · salt okunur" : ""}</div>
-            <label class="form-label small">SQL</label>
-            <textarea class="form-control font-monospace mb-2 ${cls}-sql" rows="10" ${roAttr}></textarea>
-            <label class="form-label small">Rollback</label>
+            <label class="form-label small d-flex align-items-center">SQL${badge}</label>
+            <textarea class="form-control font-monospace mb-1 ${cls}-sql" rows="10" ${roAttr}></textarea>
+            ${valBox}
+            <label class="form-label small mt-2">Rollback</label>
             <textarea class="form-control font-monospace ${cls}-rb" rows="5" ${roAttr}></textarea>
         </div>`;
     };
 
     const html = `
       <div class="cr-wrap" data-conflict-id="${Number(d.conflictId)}" data-a-id="${Number(a.id)}" data-b-id="${Number(b.id)}">
-        <div class="mb-2"><span class="badge text-bg-warning text-dark">${escapeHtml(d.tableName || "")}</span></div>
+        <div class="mb-2"><span class="badge text-bg-warning text-dark">${escapeHtml(conflictLabel(d.tableName))}</span></div>
         <div class="row g-3">
           ${col(a, "cra")}
           ${col(b, "crb")}
@@ -378,13 +398,14 @@ async function openConflictReviewModal(conflictId) {
     const w = document.querySelector(".cr-wrap");
     if (w) {
         const asql = w.querySelector(".cra-sql");
-        const arb = w.querySelector(".cra-rb");
+        const arb  = w.querySelector(".cra-rb");
         const bsql = w.querySelector(".crb-sql");
-        const brb = w.querySelector(".crb-rb");
+        const brb  = w.querySelector(".crb-rb");
         if (asql) asql.value = a.sqlScript ?? "";
-        if (arb) arb.value = a.rollbackScript ?? "";
+        if (arb)  arb.value  = a.rollbackScript ?? "";
         if (bsql) bsql.value = b.sqlScript ?? "";
-        if (brb) brb.value = b.rollbackScript ?? "";
+        if (brb)  brb.value  = b.rollbackScript ?? "";
+        initConflictReviewValidation(w, a, b);
     }
 }
 
@@ -426,9 +447,10 @@ async function submitConflictReview(markResolved) {
     showToast(data?.message || "Tamam.", "success");
     const modalEl = document.getElementById("globalAppModal");
     bootstrap.Modal.getInstance(modalEl)?.hide();
-    if (markResolved) {
-        // satırı DOM'dan kaldır, pagination güncelle
-        const tr = document.querySelector(`tr[data-conflict-id="${cid}"]`);
+
+    if (markResolved || data?.autoResolved) {
+        const resolvedCid = data?.conflictId ?? cid;
+        const tr = document.querySelector(`tr[data-conflict-id="${resolvedCid}"]`);
         if (tr) {
             tr.remove();
             window.__pgState?.["conflictTableBody"]?.refresh();
@@ -1001,11 +1023,16 @@ async function openScriptCreateWizard(preset) {
             </div>
             <div class="col-md-12"><label class="form-label">Script adı</label><input id="scriptName" class="form-control" autocomplete="off" /></div>
             <div class="col-md-12"><label class="form-label">Geliştirici</label><select id="createDeveloperId" class="form-select">${devOpts}</select></div>
-            <div class="col-md-12"><label class="form-label">SQL script</label><textarea id="sqlScript" class="form-control font-monospace" rows="8" placeholder="CREATE / ALTER ..."></textarea></div>
+            <div class="col-md-12">
+                <label class="form-label d-flex align-items-center gap-2">
+                    SQL script
+                    <span id="swSqlStatusBadge" class="sw-sql-badge sw-sql-badge--idle">— kontrol bekleniyor</span>
+                </label>
+                <textarea id="sqlScript" class="form-control font-monospace" rows="8" placeholder="CREATE / ALTER ..."></textarea>
+            </div>
             <div class="col-md-12"><label class="form-label">Rollback (isteğe bağlı)</label><textarea id="rollbackScript" class="form-control font-monospace" rows="4"></textarea></div>
             <div id="swSqlValidateBox" class="col-12 alert d-none small mb-0" role="status"></div>
             <div class="col-12 d-flex justify-content-end flex-wrap gap-2 mt-3">
-                <button type="button" class="btn btn-outline-secondary" onclick="validateScriptWizardSql()">SQL kontrol et</button>
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
                 <button type="button" id="swCreateScriptBtn" class="btn btn-primary" onclick="submitCreateScript()">Oluştur</button>
             </div>
@@ -1013,6 +1040,7 @@ async function openScriptCreateWizard(preset) {
 
     openGlobalModal("Yeni script", content);
 
+    initWizardAutoValidate();
     void renderScriptWizardBatchPicker();
 }
 
@@ -1256,28 +1284,27 @@ function appendScriptRowFromCreateResponse(data) {
         : `/Scripts/Detail/${encodeURIComponent(idStr)}`;
 
     const rb = data.hasRollback === true || data.HasRollback === true ? "Var" : "—";
-    const name = data.scriptName ?? data.ScriptName ?? "";
-    const status = data.status ?? data.Status ?? "";
+    const name      = data.scriptName ?? data.ScriptName ?? "";
+    const status    = data.status ?? data.Status ?? "";
+    const statusKey = data.statusKey ?? data.StatusKey ?? "Draft";
     const batchName = data.batchName ?? data.BatchName ?? "";
-    const devName = data.developerName ?? data.DeveloperName ?? "";
-    const created = data.createdAtDisplay ?? data.CreatedAtDisplay ?? "";
-    const canDel = data.canDelete === true || data.CanDelete === true;
-    const delPh = window.__scriptsPageUrls?.deleteUrlPlaceholder;
-    const delBtn =
-        canDel && delPh
-            ? `<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteScriptFromList(${Number(
-                  scriptId
-              )}, this)">Sil</button>`
-            : "";
+    const devName   = data.developerName ?? data.DeveloperName ?? "";
+    const created   = data.createdAtDisplay ?? data.CreatedAtDisplay ?? "";
+    const canDel    = data.canDelete === true || data.CanDelete === true;
+    const delPh     = window.__scriptsPageUrls?.deleteUrlPlaceholder;
+    const delBtn    = canDel && delPh
+        ? `<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteScriptFromList(${Number(scriptId)}, this)">Sil</button>`
+        : "";
+
+    const badgeCls = { Draft: "script-badge--draft", Ready: "script-badge--ready", Conflict: "script-badge--conflict" }[statusKey] ?? "script-badge--draft";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-        <td>${escapeHtml(name)}</td>
-        <td>${escapeHtml(status)}</td>
+        <td><a href="${detailHref}" class="table-link">${escapeHtml(name)}</a></td>
+        <td><span class="script-badge ${badgeCls}">${escapeHtml(status)}</span></td>
         <td>${escapeHtml(batchName)}</td>
         <td>${escapeHtml(devName)}</td>
         <td>${escapeHtml(rb)}</td>
-        <td><span class="text-muted">—</span></td>
         <td>${escapeHtml(created)}</td>
         <td class="text-nowrap"><a class="btn btn-sm btn-table" href="${detailHref}">Detay</a> ${delBtn}</td>`;
     tr.dataset.filterHidden = "0";
@@ -1366,33 +1393,49 @@ function downloadTextFile(filename, text) {
 }
 
 function renderSwSqlValidateBox(data) {
-    const box = document.getElementById("swSqlValidateBox");
-    const btn = document.getElementById("swCreateScriptBtn");
+    const box    = document.getElementById("swSqlValidateBox");
+    const btn    = document.getElementById("swCreateScriptBtn");
+    const badge  = document.getElementById("swSqlStatusBadge");
+
+    function setBadge(state, text) {
+        if (!badge) return;
+        badge.className = "sw-sql-badge sw-sql-badge--" + state;
+        badge.textContent = text;
+    }
+
     if (!box) return;
+
     if (!data || data.success === false) {
         box.className = "col-12 alert alert-danger small mb-0";
         box.classList.remove("d-none");
         box.innerHTML = escapeHtml(data?.message || "Doğrulama hatası.");
+        setBadge("error", "✗ Hatalı");
         if (btn) btn.disabled = true;
         return;
     }
+
     if (data.isValid) {
-        box.className = "col-12 alert alert-success small mb-0";
-        box.classList.remove("d-none");
-        box.textContent = "T-SQL sözdizimi uygun.";
+        box.className = "d-none";
+        setBadge("ok", "✓ SQL geçerli");
         if (btn) btn.disabled = false;
         return;
     }
+
     box.className = "col-12 alert alert-danger small mb-0";
     box.classList.remove("d-none");
-    const items = (data.issues || []).map(
-        (i) =>
-            `${i.source} batch ${i.batchNumber}, satır ${i.line}, sütun ${i.column}: ${i.message}`
-    );
+
+    const issues = data.issues || [];
+    const items = issues.map((i) => {
+        const prefix = i.source && i.source !== "SQL" ? `(${i.source}) ` : "";
+        return prefix + i.message;
+    });
+
     box.innerHTML =
-        "<strong>Sözdizimi hataları:</strong><ul class='mb-0 mt-1 small'>" +
+        "<strong>SQL hatası:</strong><ul class='mb-0 mt-1'>" +
         items.map((t) => `<li>${escapeHtml(t)}</li>`).join("") +
         "</ul>";
+
+    setBadge("error", "✗ Hatalı");
     if (btn) btn.disabled = true;
 }
 
@@ -1406,6 +1449,20 @@ async function fetchValidateSqlAndRenderBox() {
     }
     const sqlScript = document.getElementById("sqlScript")?.value ?? "";
     const rollbackScript = document.getElementById("rollbackScript")?.value ?? "";
+
+    // Boşsa badge'i idle'a çek, validasyon yapma
+    if (!sqlScript.trim()) {
+        const badge = document.getElementById("swSqlStatusBadge");
+        if (badge) { badge.className = "sw-sql-badge sw-sql-badge--idle"; badge.textContent = "— kontrol bekleniyor"; }
+        document.getElementById("swSqlValidateBox")?.classList.add("d-none");
+        const btn = document.getElementById("swCreateScriptBtn");
+        if (btn) btn.disabled = false;
+        return true;
+    }
+
+    // Kontrol başladı
+    const badge = document.getElementById("swSqlStatusBadge");
+    if (badge) { badge.className = "sw-sql-badge sw-sql-badge--checking"; badge.textContent = "⟳ kontrol ediliyor…"; }
     try {
         const res = await fetch(url, {
             method: "POST",
@@ -1432,6 +1489,68 @@ async function fetchValidateSqlAndRenderBox() {
         renderSwSqlValidateBox({ success: false, message: "Doğrulama isteği gönderilemedi." });
         return false;
     }
+}
+
+/** Conflict review modalındaki düzenlenebilir script taraflarına canlı SQL validasyon ekler. */
+function initConflictReviewValidation(wrap, sideA, sideB) {
+    const url = window.__scriptsPageUrls?.validateSql || window.__scriptCreateUrls?.validateSql;
+    if (!url) return;
+
+    const sides = [
+        { canEdit: sideA.canEdit, sqlEl: wrap.querySelector(".cra-sql"), rbEl: wrap.querySelector(".cra-rb"), badge: wrap.querySelector("#cra-val-badge"), box: wrap.querySelector("#cra-val-box") },
+        { canEdit: sideB.canEdit, sqlEl: wrap.querySelector(".crb-sql"), rbEl: wrap.querySelector(".crb-rb"), badge: wrap.querySelector("#crb-val-badge"), box: wrap.querySelector("#crb-val-box") }
+    ];
+
+    for (const s of sides) {
+        if (!s.canEdit || !s.sqlEl) continue;
+
+        const validate = debounce(async () => {
+            const sql = s.sqlEl?.value ?? "";
+            const rb  = s.rbEl?.value  ?? "";
+
+            if (!sql.trim()) {
+                if (s.badge) { s.badge.className = "sw-sql-badge sw-sql-badge--idle ms-2"; s.badge.textContent = "— kontrol bekleniyor"; }
+                if (s.box)   { s.box.className = "d-none"; }
+                return;
+            }
+
+            if (s.badge) { s.badge.className = "sw-sql-badge sw-sql-badge--checking ms-2"; s.badge.textContent = "⟳ kontrol ediliyor…"; }
+
+            try {
+                const res  = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ sqlScript: sql, rollbackScript: rb }) });
+                const data = await res.json();
+
+                if (data.isValid) {
+                    if (s.badge) { s.badge.className = "sw-sql-badge sw-sql-badge--ok ms-2"; s.badge.textContent = "✓ SQL geçerli"; }
+                    if (s.box)   { s.box.className = "d-none"; }
+                } else {
+                    if (s.badge) { s.badge.className = "sw-sql-badge sw-sql-badge--error ms-2"; s.badge.textContent = "✗ Hatalı"; }
+                    if (s.box) {
+                        const items = (data.issues || []).map(i => {
+                            const prefix = i.source && i.source !== "SQL" ? `(${i.source}) ` : "";
+                            return escapeHtml(prefix + i.message);
+                        });
+                        s.box.className = "alert alert-danger small mb-0 mt-1 py-2";
+                        s.box.innerHTML = items.map(t => `<div>${t}</div>`).join("");
+                    }
+                }
+            } catch {
+                if (s.badge) { s.badge.className = "sw-sql-badge sw-sql-badge--idle ms-2"; s.badge.textContent = "— doğrulama yapılamadı"; }
+            }
+        }, 700);
+
+        s.sqlEl.addEventListener("input", validate);
+        s.rbEl?.addEventListener("input", validate);
+    }
+}
+
+function initWizardAutoValidate() {
+    const sqlEl = document.getElementById("sqlScript");
+    const rbEl  = document.getElementById("rollbackScript");
+    if (!sqlEl) return;
+    const doValidate = debounce(() => fetchValidateSqlAndRenderBox(), 700);
+    sqlEl.addEventListener("input", doValidate);
+    rbEl?.addEventListener("input", doValidate);
 }
 
 async function validateScriptWizardSql() {
@@ -1652,7 +1771,9 @@ function appendReleaseRowFromCreateResponse(data) {
             : "";
 
     const tr = document.createElement("tr");
-    tr.innerHTML = `${adminCb}
+    tr.dataset.releaseId = idStr;
+    tr.innerHTML = `
+        <td><span class="text-muted small">Aktif</span></td>
         <td>${escapeHtml(releaseName)}</td>
         <td>${escapeHtml(String(scriptCount))}</td>
         <td>${escapeHtml(String(rbCount))}</td>
@@ -1725,12 +1846,6 @@ async function submitCreateRelease() {
     }
 
     showToast(data?.message || data?.Message || "Release oluşturuldu.", "success");
-    const newReleaseId = data.releaseId ?? data.ReleaseId;
-    const ph = window.__releaseCreateUrls?.detailUrlPlaceholder;
-    if (newReleaseId && ph) {
-        window.location.href = String(ph).replace(/999999999/g, String(newReleaseId));
-        return;
-    }
     appendReleaseRowFromCreateResponse(data);
     const modalEl = document.getElementById("globalAppModal");
     bootstrap.Modal.getInstance(modalEl)?.hide();

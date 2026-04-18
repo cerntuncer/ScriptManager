@@ -68,8 +68,7 @@
                     <th>Sıra</th>
                     <th>Ad</th>
                     <th>Geliştirici</th>
-                    <th>Tablolar (tahmini)</th>
-                    <th>Önb.</th>
+                    <th>Tablolar</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -87,64 +86,13 @@
                         <td><a href="@Url.Action("Detail", "Scripts", new { id = s.ScriptId })">@s.Name</a></td>
                         <td>@s.DeveloperName</td>
                         <td class="small text-muted">@s.ReferencedTablesDisplay</td>
-                        <td>
-                            @if (s.HasCacheBustHints)
-                            {
-                                <span class="badge text-bg-warning text-dark" title="@s.CacheBustSummary">!</span>
-                            }
-                            else
-                            {
-                                <span class="text-muted">—</span>
-                            }
-                        </td>
                     </tr>
                 }
                 </tbody>
             </table>
         </div>
-        <p class="small text-muted mb-0 px-3 py-2">Sıra, birleşik SQL ile aynı (klasör ağacı post-order).</p>
     </div>
 }
 
-<div class="content-grid single-column">
-    <section class="panel-card">
-        <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h3 class="mb-0">Birleşik SQL</h3>
-            <button type="button" class="btn btn-sm btn-outline-primary"
-                    onclick="downloadTextFile('@((Model.Version ?? "").Replace("\\","_").Replace("/","_"))-release.sql', document.getElementById('releaseSqlBlock')?.innerText ?? '')">
-                .sql indir
-            </button>
-        </div>
-        @if (string.IsNullOrWhiteSpace(Model.CombinedSql))
-        {
-            <p class="text-muted mb-0 px-3 py-2">SQL yok.</p>
-        }
-        else
-        {
-            <pre id="releaseSqlBlock" class="code-box">@Model.CombinedSql</pre>
-        }
-    </section>
-
-    <section class="panel-card code-panel">
-        <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h3 class="mb-0">Birleşik rollback</h3>
-            @if (!string.IsNullOrWhiteSpace(Model.CombinedRollback))
-            {
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        onclick="downloadTextFile('@((Model.Version ?? "").Replace("\\","_").Replace("/","_"))-rollback.sql', document.getElementById('releaseRbBlock')?.innerText ?? '')">
-                    Rollback indir
-                </button>
-            }
-        </div>
-        @if (string.IsNullOrWhiteSpace(Model.CombinedRollback))
-        {
-            <p class="text-muted mb-0 px-3 py-2">Rollback metni yok.</p>
-        }
-        else
-        {
-            <pre id="releaseRbBlock" class="code-box">@Model.CombinedRollback</pre>
-        }
-    </section>
-</div>
 
 <textarea id="release-detail-state-json" class="d-none" readonly>@Html.Raw(JsonSerializer.Serialize(stateObj))</textarea>

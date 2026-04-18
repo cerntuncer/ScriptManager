@@ -24,8 +24,9 @@ public class ConflictsController : Controller
     {
         ViewData["Title"] = "Çakışmalar";
         ViewBag.CanResolveConflicts = AuthHelper.CanWriteOperational(User);
-        var rows = await ConflictReadQueries.ListUnresolvedAsync(_db);
-        return View(new ConflictsIndexViewModel { Rows = rows });
+        var rows         = await ConflictReadQueries.ListUnresolvedAsync(_db);
+        var resolvedRows = await ConflictReadQueries.ListRecentlyResolvedAsync(_db);
+        return View(new ConflictsIndexViewModel { Rows = rows, ResolvedRows = resolvedRows });
     }
 
     [HttpGet]
@@ -196,15 +197,33 @@ public class ConflictsController : Controller
                 await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
             }
 
+            // Sync sonrası bu çakışma hâlâ açık mı kontrol et
+            var stillOpen = await _db.Conflicts
+                .AnyAsync(c => c.Id == body.ConflictId && !c.IsDeleted && c.ResolvedAt == null);
+
+            // Çakışma sync tarafından otomatik kaldırıldıysa çözümlendi olarak işaretle
+            if (!body.MarkResolved && !stillOpen && touched.Count > 0)
+            {
+                // Sync hard-delete yaptı; conflict artık yok — bu durumu frontend'e bildir
+                await tx.CommitAsync();
+                return Json(new
+                {
+                    success = true,
+                    autoResolved = true,
+                    message = "Scriptler güncellendi; çakışma otomatik olarak çözümlendi.",
+                    conflictId = body.ConflictId
+                });
+            }
+
             await tx.CommitAsync();
 
             var msg = body.MarkResolved
                 ? "Değişiklikler kaydedildi; çakışma kapatıldı."
                 : touched.Count > 0
-                    ? "Scriptler güncellendi. Metin artık aynı tabloda çakışmıyorsa kayıt otomatik kalkabilir; gerekirse «Çözümlendi» ile kapatın."
+                    ? "Scriptler güncellendi."
                     : "Kayıt güncellenmedi.";
 
-            return Json(new { success = true, message = msg });
+            return Json(new { success = true, autoResolved = body.MarkResolved, message = msg, conflictId = body.ConflictId });
         }
         catch
         {

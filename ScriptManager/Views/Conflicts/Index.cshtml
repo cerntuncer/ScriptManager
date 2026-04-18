@@ -35,7 +35,9 @@
                 @foreach (var r in Model.Rows)
                 {
                     <tr data-conflict-id="@r.ConflictId" data-filter-hidden="0">
-                        <td><span class="badge text-bg-warning text-dark">@r.TableName</span></td>
+                        <td>
+                            <span class="badge text-bg-warning text-dark">@r.ConflictLabel</span>
+                        </td>
                         <td>
                             <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })">@r.ScriptName</a>
                             <div class="small text-muted">@r.ScriptDeveloper</div>
@@ -64,6 +66,46 @@
     }
 </div>
 
+@if (Model.ResolvedRows.Count > 0)
+{
+    <div class="panel-card mt-4">
+        <div class="panel-header d-flex justify-content-between align-items-center">
+            <h3 class="mb-0">Son çözümlenen çakışmalar (@Model.ResolvedRows.Count)</h3>
+        </div>
+        <div class="table-wrap custom-scroll">
+            <table class="modern-table">
+                <thead>
+                <tr>
+                    <th>Çakışma</th>
+                    <th>Script 1</th>
+                    <th>Script 2</th>
+                    <th>Çözen</th>
+                    <th>Çözüm tarihi</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var r in Model.ResolvedRows)
+                {
+                    <tr>
+                        <td><span class="badge text-bg-success">@r.ConflictLabel</span></td>
+                        <td>
+                            <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })" class="small">@r.ScriptName</a>
+                            <div class="small text-muted">@r.ScriptDeveloper</div>
+                        </td>
+                        <td>
+                            <a href="@Url.Action("Detail", "Scripts", new { id = r.OtherScriptId })" class="small">@r.OtherScriptName</a>
+                            <div class="small text-muted">@r.OtherDeveloper</div>
+                        </td>
+                        <td class="small">@(r.ResolvedByName ?? "—")</td>
+                        <td class="small text-muted">@r.ResolvedAtDisplay</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script>
         window.__conflictsUrls = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
@@ -72,7 +114,7 @@
         }));
     </script>
     <script>
-        setupPagination("conflictTableBody", 15);
+        setupPagination("conflictTableBody", 10);
 
         async function resolveConflict(conflictId) {
             const res = await fetch("@Url.Action("Resolve", "Conflicts")", {

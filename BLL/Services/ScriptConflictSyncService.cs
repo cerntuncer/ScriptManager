@@ -21,21 +21,28 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
             .FirstOrDefaultAsync(s => s.Id == scriptId && !s.IsDeleted, cancellationToken);
         if (script == null || script.Status == ScriptStatus.Deleted) return;
 
-        var myKeys = CollectConflictKeys(script);
-        var peers = await GetPeerScriptsAsync(script, cancellationToken);
+        var myKeys = SqlConflictKeyExtractor.ExtractFromScript(script.SqlScript, script.RollbackScript);
+        var peers  = await GetPeerScriptsAsync(script, cancellationToken);
 
         var desired = new HashSet<(long Min, long Max, string Key)>();
         foreach (var peer in peers)
         {
             if (peer.Id == script.Id) continue;
-            var peerKeys = CollectConflictKeys(peer);
-            foreach (var t in myKeys)
+            var peerKeys = SqlConflictKeyExtractor.ExtractFromScript(peer.SqlScript, peer.RollbackScript);
+            var min = Math.Min(script.Id, peer.Id);
+            var max = Math.Max(script.Id, peer.Id);
+
+            // Tüm key çiftlerini kural matrisi ile karşılaştır, çakışanları topla
+            var topics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mk in myKeys)
+            foreach (var pk in peerKeys)
             {
-                if (!peerKeys.Contains(t)) continue;
-                var min = Math.Min(script.Id, peer.Id);
-                var max = Math.Max(script.Id, peer.Id);
-                desired.Add((min, max, t));
+                if (!ConflictKey.DoConflict(mk, pk)) continue;
+                topics.Add(ConflictKey.CanonicalKey(mk, pk));
             }
+
+            foreach (var topic in topics)
+                desired.Add((min, max, topic));
         }
 
         var existingRows = await _db.Conflicts
@@ -100,14 +107,6 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         await ApplyConflictStatusForScriptAsync(scriptId, cancellationToken);
         if (otherScriptId != scriptId)
             await ApplyConflictStatusForScriptAsync(otherScriptId, cancellationToken);
-    }
-
-    private static HashSet<string> CollectConflictKeys(Script s)
-    {
-        var a = SqlReferencedTableExtractor.ExtractRecordIds(s.SqlScript);
-        var b = SqlReferencedTableExtractor.ExtractRecordIds(s.RollbackScript);
-        a.UnionWith(b);
-        return a;
     }
 
     private async Task<List<Script>> GetPeerScriptsAsync(Script script, CancellationToken cancellationToken)

@@ -17,12 +17,14 @@ namespace ScriptManager.Controllers
         private readonly MyContext _db;
         private readonly IMediator _mediator;
         private readonly ISqlScriptSyntaxValidator _sqlSyntax;
+        private readonly IScriptConflictSyncService _conflictSync;
 
-        public ScriptsController(MyContext db, IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax)
+        public ScriptsController(MyContext db, IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax, IScriptConflictSyncService conflictSync)
         {
             _db = db;
             _mediator = mediator;
             _sqlSyntax = sqlSyntax;
+            _conflictSync = conflictSync;
         }
 
         /// <summary>SQL Server NOEXEC + ScriptDom + heuristik ile T-SQL kontrolü (kaydetmeden).</summary>
@@ -264,6 +266,7 @@ namespace ScriptManager.Controllers
                 BatchId = result.BatchId,
                 ScriptName = medReq.Name,
                 Status = ScriptReadQueries.ScriptStatusDisplay(ScriptStatus.Draft),
+                StatusKey = ScriptStatus.Draft.ToString(),
                 BatchName = batchDisplay,
                 DeveloperName = result.DeveloperName ?? string.Empty,
                 HasRollback = !string.IsNullOrWhiteSpace(medReq.RollbackScript),
@@ -297,8 +300,68 @@ namespace ScriptManager.Controllers
             script.RollbackScript = string.IsNullOrWhiteSpace(body.RollbackScript) ? null : body.RollbackScript;
 
             await _db.SaveChangesAsync();
+            await _conflictSync.SyncAfterScriptSavedAsync(script.Id);
 
             return Json(new { success = true, message = "Script güncellendi." });
+        }
+
+        /// <summary>
+        /// Conflict tespiti için tanılama: bir script'in ürettiği keyleri,
+        /// bulunan peer'ları ve neden çakışıp çakışmadığını döner.
+        /// Sadece geliştirme/test amacıyla kullanılır.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> ConflictDiagnose(long id)
+        {
+            var script = await _db.Scripts
+                .Include(s => s.Batch)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+
+            if (script == null)
+                return NotFound(new { message = "Script bulunamadı." });
+
+            var myKeys = BLL.Services.SqlConflictKeyExtractor.ExtractFromScript(script.SqlScript, script.RollbackScript);
+
+            var peers = await _db.Scripts
+                .Include(s => s.Batch)
+                .AsNoTracking()
+                .Where(s => !s.IsDeleted && s.Status != ScriptStatus.Deleted && s.Id != id)
+                .ToListAsync();
+
+            var peerDiag = new List<object>();
+            foreach (var peer in peers)
+            {
+                var peerKeys = BLL.Services.SqlConflictKeyExtractor.ExtractFromScript(peer.SqlScript, peer.RollbackScript);
+                var hits = new List<string>();
+                foreach (var mk in myKeys)
+                foreach (var pk in peerKeys)
+                    if (BLL.Services.ConflictKey.DoConflict(mk, pk))
+                        hits.Add($"{mk.Serialize()} × {pk.Serialize()} → {BLL.Services.ConflictKey.CanonicalKey(mk, pk)}");
+
+                peerDiag.Add(new
+                {
+                    peerId       = peer.Id,
+                    peerName     = peer.Name,
+                    peerBatch    = peer.Batch?.Name ?? "(atanmamış)",
+                    peerBatchId  = peer.BatchId,
+                    peerReleaseId = peer.Batch?.ReleaseId,
+                    peerKeys     = peerKeys.Select(k => k.Serialize()).ToList(),
+                    conflictHits = hits,
+                    wouldConflict = hits.Count > 0
+                });
+            }
+
+            return Json(new
+            {
+                scriptId     = script.Id,
+                scriptName   = script.Name,
+                batchId      = script.BatchId,
+                batchName    = script.Batch?.Name ?? "(atanmamış)",
+                releaseId    = script.Batch?.ReleaseId,
+                myKeys       = myKeys.Select(k => k.Serialize()).ToList(),
+                peers        = peerDiag
+            });
         }
 
         [HttpPost]

@@ -40,8 +40,6 @@
         public long DeveloperId { get; set; }
         public string DeveloperName { get; set; } = string.Empty;
         public string ReferencedTablesDisplay { get; set; } = "—";
-        public bool HasCacheBustHints { get; set; }
-        public string? CacheBustSummary { get; set; }
 
         /// <summary>Seçili script export; ağaç görünümünde gösterilmeyebilir.</summary>
         public string SqlScript { get; set; } = string.Empty;

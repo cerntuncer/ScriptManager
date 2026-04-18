@@ -26,16 +26,6 @@
     </div>
 </div>
 
-@if (Model.HasCacheBustHints)
-{
-    <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
-        <span>⚠️</span>
-        <div>
-            <strong>Önbellek / plan riski ipuçları</strong>
-            <div class="small mb-0">@Model.CacheBustSummary</div>
-        </div>
-    </div>
-}
 
 <div class="panel-card mb-4">
     <div class="panel-header">

@@ -83,7 +83,7 @@
     </script>
     <script>
         setupTableFilter("releaseFilterInput", "#releaseTable tbody tr");
-        setupPagination("releaseTableBody", 15);
+        setupPagination("releaseTableBody", 10);
         document.getElementById("releaseSelectAll")?.addEventListener("change", function () {
             const on = this.checked;
             document.querySelectorAll(".release-row-cb").forEach((cb) => (cb.checked = on));

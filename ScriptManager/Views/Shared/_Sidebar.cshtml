@@ -14,24 +14,30 @@
 
 <nav class="sidebar-nav custom-scroll">
     <a class="nav-link-item @(currentController == "Dashboard" ? "active" : "")"
-       href="@Url.Action("Index", "Dashboard")">Genel Bakış</a>
+       href="@Url.Action("Index", "Dashboard")"
+       data-tooltip="Genel istatistikler ve özet">Genel Bakış</a>
 
     <a class="nav-link-item @(currentController == "Releases" ? "active" : "")"
-       href="@Url.Action("Index", "Releases")">Sürümler</a>
+       href="@Url.Action("Index", "Releases")"
+       data-tooltip="Prod'a aktarılacak sürümler">Sürümler</a>
 
     <a class="nav-link-item @(currentController == "Scripts" ? "active" : "")"
-       href="@Url.Action("Index", "Scripts")">Scriptler</a>
+       href="@Url.Action("Index", "Scripts")"
+       data-tooltip="SQL scriptlerin yönetimi">Scriptler</a>
 
     <a class="nav-link-item @(currentController == "Batches" ? "active" : "")"
-       href="@Url.Action("Index", "Batches")">Versiyonlar</a>
+       href="@Url.Action("Index", "Batches")"
+       data-tooltip="Prod öncesi script paketleri">Versiyonlar</a>
 
     <a class="nav-link-item @(currentController == "Conflicts" ? "active" : "")"
-       href="@Url.Action("Index", "Conflicts")">Çakışmalar</a>
+       href="@Url.Action("Index", "Conflicts")"
+       data-tooltip="Çakışan scriptlerin listesi">Çakışmalar</a>
 
     @if (isAdmin)
     {
         <a class="nav-link-item @(currentController == "Users" ? "active" : "")"
-           href="@Url.Action("Index", "Users")">Kullanıcılar</a>
+           href="@Url.Action("Index", "Users")"
+           data-tooltip="Kullanıcı yönetimi">Kullanıcılar</a>
     }
 </nav>
 

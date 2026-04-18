@@ -10,6 +10,8 @@ namespace ScriptManager.Models.Script
         /// <summary>Liste satırı için (AJAX oluşturma sonrası).</summary>
         public string? ScriptName { get; set; }
         public string? Status { get; set; }
+        /// <summary>Badge CSS sınıfı için enum adı: "Draft", "Ready", "Conflict".</summary>
+        public string? StatusKey { get; set; }
         public string? BatchName { get; set; }
         public string? DeveloperName { get; set; }
         public bool HasRollback { get; set; }
