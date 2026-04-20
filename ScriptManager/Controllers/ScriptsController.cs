@@ -157,13 +157,15 @@ namespace ScriptManager.Controllers
             ViewBag.CanDelete = AuthHelper.CanDeleteScript(User, model.DeveloperId);
 
             ViewBag.CanMarkDraftReady = AuthHelper.CanMarkDraftScriptReady(User, script.DeveloperId, script.Status);
+            ViewBag.CanSendToTester = AuthHelper.CanSendDraftToTester(User, script.DeveloperId, script.Status);
+            ViewBag.CanApproveTesterReview = AuthHelper.CanApprovePendingTesterReview(User, script.Status);
             ViewBag.CanEditDraftScript = AuthHelper.CanEditDraftScriptContent(User, script.DeveloperId, script.Status);
 
             ViewData["Title"] = $"Script — {model.Name}";
             return View(model);
         }
 
-        /// <summary>Taslak -> İncelemede / Hazır; İncelemede -> Hazır durum geçişi.</summary>
+        /// <summary>Taslak → testçi incelemesi veya Hazır; testçi incelemesi → Hazır (testçi).</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ChangeStatus([FromBody] ChangeScriptStatusFormRequest? body)
@@ -175,19 +177,42 @@ namespace ScriptManager.Controllers
                 return BadRequest(new { success = false, message = "Geçersiz durum." });
 
             var newStatus = (ScriptStatus)body.NewStatus;
-            if (newStatus != ScriptStatus.Ready)
-                return BadRequest(new { success = false, message = "Bu işlem yalnızca Taslak → Hazır geçişi içindir." });
+            if (newStatus != ScriptStatus.Ready && newStatus != ScriptStatus.PendingTesterReview)
+                return BadRequest(new { success = false, message = "Bu işlem yalnızca testçiye gönderme veya Hazır yapma içindir." });
 
             var script = await _db.Scripts.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted && s.Status != ScriptStatus.Deleted);
             if (script == null)
                 return NotFound(new { success = false, message = "Script bulunamadı." });
 
-            if (script.Status != ScriptStatus.Draft)
-                return BadRequest(new { success = false, message = "Yalnızca Taslak scriptler Hazır yapılabilir." });
+            if (script.Status == ScriptStatus.Conflict)
+                return BadRequest(new
+                {
+                    success = false,
+                    message =
+                        "Script çakışma durumunda. Önce Çakışmalar sayfasından kaydı çözün veya SQL’i düzelttikten sonra tekrar deneyin."
+                });
 
-            if (!AuthHelper.CanMarkDraftScriptReady(User, script.DeveloperId, script.Status))
-                return StatusCode(403, new { success = false, message = "Bu scripti Hazır yapma yetkiniz yok." });
+            if (newStatus == ScriptStatus.PendingTesterReview)
+            {
+                if (!AuthHelper.CanSendDraftToTester(User, script.DeveloperId, script.Status))
+                    return StatusCode(403, new { success = false, message = "Bu scripti testçiye gönderme yetkiniz yok." });
+            }
+            else if (newStatus == ScriptStatus.Ready)
+            {
+                if (script.Status == ScriptStatus.PendingTesterReview)
+                {
+                    if (!AuthHelper.CanApprovePendingTesterReview(User, script.Status))
+                        return StatusCode(403, new { success = false, message = "Testçi incelemesindeki scripti yalnızca testçi Hazır yapabilir." });
+                }
+                else if (script.Status == ScriptStatus.Draft)
+                {
+                    if (!AuthHelper.CanMarkDraftScriptReady(User, script.DeveloperId, script.Status))
+                        return StatusCode(403, new { success = false, message = "Bu scripti Hazır yapma yetkiniz yok." });
+                }
+                else
+                    return BadRequest(new { success = false, message = "Bu durumdan Hazır geçişi yapılamaz." });
+            }
 
             var actorId = await AuthHelper.GetActorUserIdAsync(User, _db);
             if (actorId <= 0)
@@ -291,11 +316,8 @@ namespace ScriptManager.Controllers
             if (script == null)
                 return NotFound(new { success = false, message = "Script bulunamadı." });
 
-            if (script.Status != ScriptStatus.Draft)
-                return BadRequest(new { success = false, message = "Sadece Taslak durumdaki scriptler düzenlenebilir." });
-
-            if (!AuthHelper.CanDeleteScript(User, script.DeveloperId))
-                return StatusCode(403, new { success = false, message = "Bu scripti düzenleme yetkiniz yok." });
+            if (!AuthHelper.CanEditDraftScriptContent(User, script.DeveloperId, script.Status))
+                return StatusCode(403, new { success = false, message = "Bu scripti düzenleme yetkiniz yok veya bu durumda düzenlenemez." });
 
             script.Name = body.Name.Trim();
             script.SqlScript = body.SqlScript;

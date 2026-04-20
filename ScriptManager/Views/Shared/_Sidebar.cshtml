@@ -1,7 +1,6 @@
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
     var user = ViewContext.HttpContext.User;
-    var showUserManagement = user.IsInRole("Developer");
 }
 
 <div class="sidebar-brand">
@@ -32,13 +31,6 @@
     <a class="nav-link-item @(currentController == "Conflicts" ? "active" : "")"
        href="@Url.Action("Index", "Conflicts")"
        data-tooltip="Çakışan scriptlerin listesi">Çakışmalar</a>
-
-    @if (showUserManagement)
-    {
-        <a class="nav-link-item @(currentController == "Users" ? "active" : "")"
-           href="@Url.Action("Index", "Users")"
-           data-tooltip="Kullanıcı yönetimi">Kullanıcılar</a>
-    }
 </nav>
 
 <div class="sidebar-footer">

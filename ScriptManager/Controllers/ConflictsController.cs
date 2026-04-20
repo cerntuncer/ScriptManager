@@ -25,6 +25,7 @@ public class ConflictsController : Controller
         ViewData["Title"] = "Çakışmalar";
         ViewBag.CanResolveConflicts = AuthHelper.CanResolveConflicts(User);
         ViewBag.CanViewConflictPair = AuthHelper.CanViewConflictPair(User);
+        await _conflictSync.NormalizeDuplicateOpenConflictsAsync();
         var rows         = await ConflictReadQueries.ListUnresolvedAsync(_db);
         var resolvedRows = await ConflictReadQueries.ListRecentlyResolvedAsync(_db);
         return View(new ConflictsIndexViewModel { Rows = rows, ResolvedRows = resolvedRows });
@@ -82,6 +83,42 @@ public class ConflictsController : Controller
     public class ResolveConflictForm
     {
         public long ConflictId { get; set; }
+
+        /// <summary><see cref="ConflictResolutionKind"/>: 1 = düzeltildi, 2 = düzeltmeden (varsayılan 2).</summary>
+        public int? ResolutionKind { get; set; }
+    }
+
+    private static ConflictResolutionKind NormalizeCloseKind(int? v) =>
+        v == (int)ConflictResolutionKind.FixedWithSqlChange
+            ? ConflictResolutionKind.FixedWithSqlChange
+            : ConflictResolutionKind.ClosedWithoutSqlChange;
+
+    private async Task<object?> BuildRecentResolvedPayloadAsync(long scriptId, long otherScriptId,
+        ConflictResolutionKind kind, long resolvedByUserId)
+    {
+        var s1 = await _db.Scripts.AsNoTracking()
+            .Include(s => s.Developer)
+            .FirstOrDefaultAsync(s => s.Id == scriptId && !s.IsDeleted);
+        var s2 = await _db.Scripts.AsNoTracking()
+            .Include(s => s.Developer)
+            .FirstOrDefaultAsync(s => s.Id == otherScriptId && !s.IsDeleted);
+        var actor = await _db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == resolvedByUserId && !u.IsDeleted);
+        if (s1 == null || s2 == null) return null;
+
+        var at = DateTime.UtcNow;
+        return new
+        {
+            kindDisplay = ConflictRowViewModel.FormatResolvedKindDisplay(kind),
+            scriptId = s1.Id,
+            scriptName = s1.Name,
+            scriptDeveloper = s1.Developer?.Name ?? "—",
+            otherScriptId = s2.Id,
+            otherScriptName = s2.Name,
+            otherDeveloper = s2.Developer?.Name ?? "—",
+            resolvedByName = actor?.Name ?? "—",
+            resolvedAtDisplay = at.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+        };
     }
 
     [HttpPost]
@@ -102,14 +139,21 @@ public class ConflictsController : Controller
             return BadRequest(new { success = false, message = "Bu çakışma zaten çözümlenmiş." });
 
         var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-        row.ResolvedBy = uid;
-        row.ResolvedAt = DateTime.UtcNow;
-        _db.Conflicts.Update(row);
-        await _db.SaveChangesAsync();
+        var sidA = row.ScriptId;
+        var sidB = row.ConflictingScriptId;
+        var closeKind = NormalizeCloseKind(body.ResolutionKind);
+        await _conflictSync.RemoveOpenConflictWithDismissalAsync(row.Id, uid, closeKind);
+        await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
 
-        await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(row.ScriptId, row.ConflictingScriptId);
+        var recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeKind, uid);
 
-        return Json(new { success = true, message = "Çakışma onaylandı.", conflictId = row.Id });
+        return Json(new
+        {
+            success = true,
+            message = "Çakışma kaydı kapatıldı.",
+            conflictId = body.ConflictId,
+            recentResolved
+        });
     }
 
     [HttpPost]
@@ -130,6 +174,8 @@ public class ConflictsController : Controller
 
         var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
         var allowed = new HashSet<long> { conflictSnap.ScriptId, conflictSnap.ConflictingScriptId };
+        var pairMin = Math.Min(conflictSnap.ScriptId, conflictSnap.ConflictingScriptId);
+        var pairMax = Math.Max(conflictSnap.ScriptId, conflictSnap.ConflictingScriptId);
 
         await using var tx = await _db.Database.BeginTransactionAsync();
         try
@@ -185,35 +231,54 @@ public class ConflictsController : Controller
             var sidA = conflictSnap.ScriptId;
             var sidB = conflictSnap.ConflictingScriptId;
 
+            object? recentResolved = null;
             if (body.MarkResolved)
             {
-                var row = await _db.Conflicts.FirstOrDefaultAsync(c => c.Id == body.ConflictId && !c.IsDeleted);
-                if (row != null && row.ResolvedAt == null)
-                {
-                    row.ResolvedBy = uid;
-                    row.ResolvedAt = DateTime.UtcNow;
-                    _db.Conflicts.Update(row);
-                    await _db.SaveChangesAsync();
-                }
+                ConflictResolutionKind closeKind;
+                if (touched.Count > 0)
+                    closeKind = ConflictResolutionKind.FixedWithSqlChange;
+                else if (body.ResolutionKind.HasValue &&
+                         Enum.IsDefined(typeof(ConflictResolutionKind), body.ResolutionKind.Value))
+                    closeKind = (ConflictResolutionKind)body.ResolutionKind.Value;
+                else
+                    closeKind = ConflictResolutionKind.ClosedWithoutSqlChange;
+
+                var rowToClose = await _db.Conflicts.FirstOrDefaultAsync(c =>
+                    !c.IsDeleted &&
+                    c.ResolvedAt == null &&
+                    Math.Min(c.ScriptId, c.ConflictingScriptId) == pairMin &&
+                    Math.Max(c.ScriptId, c.ConflictingScriptId) == pairMax);
+
+                if (rowToClose != null)
+                    await _conflictSync.RemoveOpenConflictWithDismissalAsync(rowToClose.Id, uid, closeKind);
 
                 await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
+
+                if (rowToClose != null)
+                    recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeKind, uid);
             }
 
-            // Sync sonrası bu çakışma hâlâ açık mı kontrol et
             var stillOpen = await _db.Conflicts
-                .AnyAsync(c => c.Id == body.ConflictId && !c.IsDeleted && c.ResolvedAt == null);
+                .AnyAsync(c =>
+                    !c.IsDeleted &&
+                    c.ResolvedAt == null &&
+                    Math.Min(c.ScriptId, c.ConflictingScriptId) == pairMin &&
+                    Math.Max(c.ScriptId, c.ConflictingScriptId) == pairMax);
 
             // Çakışma sync tarafından otomatik kaldırıldıysa çözümlendi olarak işaretle
             if (!body.MarkResolved && !stillOpen && touched.Count > 0)
             {
-                // Sync hard-delete yaptı; conflict artık yok — bu durumu frontend'e bildir
+                var autoRecent = await BuildRecentResolvedPayloadAsync(
+                    conflictSnap.ScriptId, conflictSnap.ConflictingScriptId,
+                    ConflictResolutionKind.FixedWithSqlChange, uid);
                 await tx.CommitAsync();
                 return Json(new
                 {
                     success = true,
                     autoResolved = true,
                     message = "Scriptler güncellendi; çakışma otomatik olarak çözümlendi.",
-                    conflictId = body.ConflictId
+                    conflictId = body.ConflictId,
+                    recentResolved = autoRecent
                 });
             }
 
@@ -225,7 +290,14 @@ public class ConflictsController : Controller
                     ? "Scriptler güncellendi."
                     : "Kayıt güncellenmedi.";
 
-            return Json(new { success = true, autoResolved = body.MarkResolved, message = msg, conflictId = body.ConflictId });
+            return Json(new
+            {
+                success = true,
+                autoResolved = body.MarkResolved,
+                message = msg,
+                conflictId = body.ConflictId,
+                recentResolved
+            });
         }
         catch
         {

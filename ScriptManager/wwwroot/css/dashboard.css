@@ -234,6 +234,7 @@ body {
 .gs-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
 .gs-badge--ready    { background: #dcfce7; color: #15803d; }
 .gs-badge--draft    { background: #e0e7ff; color: #4338ca; }
+.gs-badge--pending  { background: #fef3c7; color: #b45309; }
 .gs-badge--conflict { background: #ffe4e6; color: #be123c; }
 .gs-loading, .gs-empty { padding: 12px 14px; font-size: 13px; color: var(--muted); }
 
@@ -618,9 +619,59 @@ body {
         background: linear-gradient(180deg,#8793ff 0%, #5b6cff 100%);
     }
 
+/* Modal açılınca sayfa kaymasını azalt */
+html {
+    scrollbar-gutter: stable;
+}
+
 .table-wrap {
     overflow: auto;
 }
+
+.conflicts-page .modern-table {
+    table-layout: fixed;
+}
+
+    .conflicts-page .modern-table thead th,
+    .conflicts-page .modern-table tbody td {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        vertical-align: top;
+    }
+
+    .conflicts-page .modern-table thead th:first-child,
+    .conflicts-page .modern-table tbody td.conflict-topic-cell {
+        width: 26%;
+        max-width: 280px;
+    }
+
+    .conflicts-page .conflict-topic-pill {
+        display: block;
+        max-width: 100%;
+        padding: 5px 9px;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.35;
+        border-radius: 8px;
+        background: #fffbeb;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .conflicts-page .modern-table thead th:last-child,
+    .conflicts-page .modern-table tbody td:last-child {
+        width: 7.5rem;
+        white-space: nowrap;
+        overflow: visible;
+        word-break: normal;
+    }
+
+    .conflicts-page .modern-table tbody td.text-nowrap {
+        white-space: nowrap;
+    }
 
 .modern-table {
     width: 100%;
@@ -665,9 +716,42 @@ body {
 }
 .script-badge--ready    { background: #dcfce7; color: #15803d; }
 .script-badge--draft    { background: #e0e7ff; color: #4338ca; }
+.script-badge--pending  { background: #fef3c7; color: #b45309; }
 .script-badge--conflict { background: #ffe4e6; color: #be123c; }
 
-/* Script listesinde inline "Hazır" butonu */
+#globalAppModal .cr-wrap .row {
+    min-width: 0;
+}
+
+#globalAppModal .cr-wrap textarea.form-control {
+    min-height: 200px;
+    resize: vertical;
+    max-width: 100%;
+}
+
+/* Script listesinde inline kısayol butonları */
+.btn-inline-send {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    border-radius: 50%;
+    border: 1.5px solid #b45309;
+    background: transparent;
+    color: #b45309;
+    font-size: 11px;
+    line-height: 1;
+    padding: 0;
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+    .btn-inline-send:hover {
+        background: #fff7ed;
+    }
+
 .btn-inline-ready {
     display: inline-flex;
     align-items: center;
@@ -1419,10 +1503,6 @@ body {
     color: var(--primary);
 }
 
-.vtree-label--clickable:hover .vtree-action-hint {
-    opacity: 1;
-}
-
 .vtree-icon {
     color: var(--muted);
     flex-shrink: 0;
@@ -1448,11 +1528,29 @@ body {
     text-overflow: ellipsis;
 }
 
-.vtree-action-hint {
-    color: var(--muted);
-    opacity: 0;
-    transition: opacity .15s ease;
+.vtree-edit-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--primary);
+    cursor: pointer;
     flex-shrink: 0;
+    transition: background .15s ease;
+    padding: 0;
+    margin-left: 4px;
+}
+
+.vtree-edit-btn:hover {
+    background: var(--primary-soft);
+}
+
+.vtree-row:hover .vtree-edit-btn {
+    display: flex;
 }
 
 .vtree-delete-btn {

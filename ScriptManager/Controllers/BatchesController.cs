@@ -336,9 +336,58 @@ public class BatchesController : Controller
 
         return Json(new { success = true, message = $"\"{root.Name}\" versiyonu ve içeriği silindi." });
     }
+
+    /// <summary>Havuz / sürüm ağacındaki kilitsiz klasör adını günceller (aynı üst + sürüm kapsamında tekil ad).</summary>
+    [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> RenamePoolBatch([FromBody] RenamePoolBatchBody? body)
+    {
+        if (!AuthHelper.CanWriteOperational(User))
+            return Forbid();
+
+        var batchId = body?.BatchId ?? 0;
+        if (batchId <= 0)
+            return BadRequest(new { success = false, message = "Geçersiz klasör." });
+
+        if (string.IsNullOrWhiteSpace(body?.Name))
+            return BadRequest(new { success = false, message = "Ad zorunludur." });
+
+        var normalized = body!.Name.Trim();
+        if (normalized.Length > 200)
+            return BadRequest(new { success = false, message = "Ad çok uzun." });
+
+        var batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == batchId && !b.IsDeleted);
+        if (batch == null)
+            return BadRequest(new { success = false, message = "Klasör bulunamadı." });
+        if (batch.IsLocked)
+            return BadRequest(new { success = false, message = "Kilitli klasör yeniden adlandırılamaz." });
+
+        if (!string.Equals(batch.Name, normalized, StringComparison.Ordinal))
+        {
+            var duplicate = await _db.Batches.AsNoTracking().AnyAsync(b =>
+                !b.IsDeleted &&
+                b.Id != batch.Id &&
+                b.ParentBatchId == batch.ParentBatchId &&
+                b.ReleaseId == batch.ReleaseId &&
+                b.Name == normalized);
+            if (duplicate)
+                return BadRequest(new { success = false, message = "Bu düzeyde aynı ada sahip bir klasör zaten var." });
+        }
+
+        batch.Name = normalized;
+        await _db.SaveChangesAsync();
+
+        return Json(new { success = true, message = "Ad güncellendi.", name = normalized });
+    }
 }
 
 public class DeletePoolBatchBody
 {
     public long BatchId { get; set; }
+}
+
+public class RenamePoolBatchBody
+{
+    public long BatchId { get; set; }
+    public string? Name { get; set; }
 }

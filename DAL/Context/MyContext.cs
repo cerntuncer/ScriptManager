@@ -13,6 +13,7 @@ namespace DAL.Context
         public DbSet<Script> Scripts { get; set; }
         public DbSet<Release> Releases { get; set; }
         public DbSet<Conflict> Conflicts { get; set; }
+        public DbSet<ConflictPairDismissal> ConflictPairDismissals { get; set; }
         public DbSet<Batch> Batches { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -24,6 +25,7 @@ namespace DAL.Context
             modelBuilder.ApplyConfiguration(new ScriptMap());
             modelBuilder.ApplyConfiguration(new ReleaseMap());
             modelBuilder.ApplyConfiguration(new ConflictMap());
+            modelBuilder.ApplyConfiguration(new ConflictPairDismissalMap());
             modelBuilder.ApplyConfiguration(new BatchMap());
         }
     }

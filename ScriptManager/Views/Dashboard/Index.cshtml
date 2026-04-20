@@ -9,7 +9,7 @@
     @* conic-gradient cumulative stops — palette: sky / indigo / rose / slate *@
     var s1 = pctD(Model.ReadyScripts);
     var s2 = s1 + pctD(Model.DraftScripts);
-    var s3 = s2 + pctD(Model.OpenConflicts);
+    var s3 = s2 + pctD(Model.ScriptsInOpenConflict);
     string Fmt(double v) => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
     var conicBg = total == 0
         ? "conic-gradient(#e8eaf3 0% 100%)"
@@ -62,9 +62,9 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
         <div class="dash-kpi-body">
-            <span class="dash-kpi-label">Açık Çakışma</span>
+            <span class="dash-kpi-label">Açık çakışma kaydı</span>
             <span class="dash-kpi-value @(Model.OpenConflicts > 0 ? "text-danger-val" : "")">@Model.OpenConflicts</span>
-            <span class="dash-kpi-sub">@(Model.OpenConflicts > 0 ? "Çözüm gerekiyor" : "Sorun yok")</span>
+            <span class="dash-kpi-sub">@(Model.OpenConflicts > 0 ? $"{Model.OpenConflicts} kayıt · çözüm gerekiyor" : "Sorun yok")</span>
         </div>
     </div>
 </div>
@@ -122,12 +122,12 @@
                     </div>
                     <div class="dash-dist-row">
                         <span class="dash-dist-dot dash-dist-dot--conflict"></span>
-                        <span class="dash-dist-name">Çakışma</span>
+                        <span class="dash-dist-name">Çakışma (script)</span>
                         <div class="dash-dist-track">
-                            <div class="dash-dist-fill dash-dist-fill--conflict" style="width:@(pct(Model.OpenConflicts))%"></div>
+                            <div class="dash-dist-fill dash-dist-fill--conflict" style="width:@(pct(Model.ScriptsInOpenConflict))%"></div>
                         </div>
-                        <span class="dash-dist-count">@Model.OpenConflicts</span>
-                        <span class="dash-dist-pct">%@pct(Model.OpenConflicts)</span>
+                        <span class="dash-dist-count">@Model.ScriptsInOpenConflict</span>
+                        <span class="dash-dist-pct">%@pct(Model.ScriptsInOpenConflict)</span>
                     </div>
                     @if (Model.OtherScripts > 0)
                     {

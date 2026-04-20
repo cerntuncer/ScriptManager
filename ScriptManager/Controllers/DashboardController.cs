@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ScriptManager.Data;
 using DAL.Context;
 using ScriptManager.Models.Dashboard;
@@ -21,18 +22,47 @@ namespace ScriptManager.Controllers
             var releases = await ReleaseReadQueries.ListReleasesAsync(_db);
             var scripts = await ScriptReadQueries.ListActiveScriptsAsync(_db);
 
-            var readyCount = scripts.Count(s => string.Equals(s.Status, "Ready", StringComparison.OrdinalIgnoreCase));
-            var conflictCount = scripts.Count(s => string.Equals(s.Status, "Conflict", StringComparison.OrdinalIgnoreCase));
-            var draftCount = scripts.Count(s => string.Equals(s.Status, "Draft", StringComparison.OrdinalIgnoreCase));
+            var openConflictRecordCount = await _db.Conflicts.AsNoTracking()
+                .CountAsync(c => c.ResolvedAt == null && !c.IsDeleted);
+
+            var openConflictPairs = await _db.Conflicts.AsNoTracking()
+                .Where(c => c.ResolvedAt == null && !c.IsDeleted)
+                .Select(c => new { c.ScriptId, c.ConflictingScriptId })
+                .ToListAsync();
+            var scriptIdsInOpenConflicts = openConflictPairs
+                .SelectMany(p => new[] { p.ScriptId, p.ConflictingScriptId })
+                .ToHashSet();
+
+            var readyCount = 0;
+            var draftCount = 0;
+            var scriptsInOpenConflict = 0;
+            var otherCount = 0;
+
+            foreach (var s in scripts)
+            {
+                if (scriptIdsInOpenConflicts.Contains(s.ScriptId))
+                {
+                    scriptsInOpenConflict++;
+                    continue;
+                }
+
+                if (string.Equals(s.Status, "Ready", StringComparison.OrdinalIgnoreCase))
+                    readyCount++;
+                else if (string.Equals(s.Status, "Draft", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(s.Status, "PendingTesterReview", StringComparison.OrdinalIgnoreCase))
+                    draftCount++;
+                else
+                    otherCount++;
+            }
+
             var scriptsTotal = scripts.Count;
-            var accounted = readyCount + conflictCount + draftCount;
-            var otherCount = Math.Max(0, scriptsTotal - accounted);
 
             var model = new DashboardViewModel
             {
                 TotalReleases = releases.Count,
                 TotalScripts = scriptsTotal,
-                OpenConflicts = conflictCount,
+                OpenConflicts = openConflictRecordCount,
+                ScriptsInOpenConflict = scriptsInOpenConflict,
                 ReadyScripts = readyCount,
                 DraftScripts = draftCount,
                 OtherScripts = otherCount,

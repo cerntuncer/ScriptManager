@@ -1,3 +1,6 @@
+using System.Linq;
+using DAL.Enums;
+
 namespace BLL.Services;
 
 /// <summary>
@@ -29,6 +32,9 @@ public enum ConflictKeyType
 /// <param name="SubKey">Record çakışmalarında değer bilgisi (ör. "42"). Diğer tipler için null.</param>
 public sealed record ConflictKey(ConflictKeyType Type, string ObjectName, string? SubKey = null)
 {
+    /// <summary>Veritabanında birden fazla konuyu çakışma kaydının konu alanında birleştirmek için ayraç.</summary>
+    public const string MultiTopicSeparator = " · ";
+
     // ─── Factory Metotlar ────────────────────────────────────────────────────
 
     /// <summary>Belirli bir satır hedefleyen key üretir. Örn: WHERE UserId = 42</summary>
@@ -83,6 +89,9 @@ public sealed record ConflictKey(ConflictKeyType Type, string ObjectName, string
         };
     }
 
+    /// <summary>Tüm tespitler yalnızca uyarı kaydıdır; script durumu veya Hazır akışı engellenmez.</summary>
+    public static ConflictSeverity SeverityForPair() => ConflictSeverity.ReviewAdvised;
+
     /// <summary>
     /// Conflict çiftinden DB'de saklanacak canonical anahtar stringi üretir.
     /// DDL tarafı her zaman öne çıkar (daha anlamlı).
@@ -114,16 +123,49 @@ public sealed record ConflictKey(ConflictKeyType Type, string ObjectName, string
         _                         => "?"
     };
 
+    /// <summary>Çakışma kaydında saklanan bir veya birden fazla konu parçasını ayırır.</summary>
+    public static IEnumerable<string> SplitStoredTopics(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored)) yield break;
+        foreach (var part in stored.Split(MultiTopicSeparator, StringSplitOptions.None))
+        {
+            var t = part.Trim();
+            if (t.Length > 0) yield return t;
+        }
+    }
+
+    /// <summary>Aynı script çifti için tüm canonical konu dizelerini tek DB alanında birleştirir.</summary>
+    public static string CombineTopics(IEnumerable<string> topics)
+    {
+        var list = topics
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        return string.Join(MultiTopicSeparator, list);
+    }
+
     /// <summary>
     /// DB'de saklanan serializasyon stringinden okunabilir kullanıcı etiketi üretir.
     /// Örn: "RECORD:USERID:42" → "Kayıt: UserId = 42"
     ///      "DDL:USERS"        → "Tablo: Users"
     ///      "OBJ:GETUSERS"     → "Nesne: GetUsers"
+    /// Birden fazla konu <see cref="MultiTopicSeparator"/> ile ayrılmışsa hepsi listelenir.
     /// </summary>
     public static string ToDisplayLabel(string? serialized)
     {
         if (string.IsNullOrWhiteSpace(serialized)) return serialized ?? "";
 
+        var topicParts = SplitStoredTopics(serialized).ToList();
+        if (topicParts.Count == 0) return serialized;
+        if (topicParts.Count == 1) return ToDisplayLabelSingle(topicParts[0]);
+
+        return string.Join("; ", topicParts.Select(ToDisplayLabelSingle));
+    }
+
+    private static string ToDisplayLabelSingle(string serialized)
+    {
         var parts = serialized.Split(':', 3);
         if (parts.Length < 2) return serialized;
 

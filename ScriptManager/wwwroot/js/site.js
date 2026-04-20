@@ -56,8 +56,8 @@ function debounce(fn, delay = 350) {
     };
 }
 
-const _statusLabel = { Draft: "Taslak", Ready: "Hazır", Conflict: "Çakışma", Deleted: "Silindi" };
-const _statusCls   = { Draft: "gs-badge--draft", Ready: "gs-badge--ready", Conflict: "gs-badge--conflict" };
+const _statusLabel = { Draft: "Taslak", PendingTesterReview: "Testçi incelemesinde", Ready: "Hazır", Conflict: "Çakışma", Deleted: "Silindi" };
+const _statusCls   = { Draft: "gs-badge--draft", PendingTesterReview: "gs-badge--pending", Ready: "gs-badge--ready", Conflict: "gs-badge--conflict" };
 
 function initGlobalSearch() {
     const input = document.getElementById("globalSearchInput");
@@ -124,8 +124,75 @@ function initGlobalSearch() {
     });
 }
 
+/** Çakışma Pair isteği URL'i (şablon + yer tutucu veya /Pair taban). */
+function getConflictsPairUrl(conflictId) {
+    const u = window.__conflictsUrls;
+    if (!u) return null;
+    const id = String(conflictId);
+    if (u.pairTemplate && u.pairPlaceholder != null) return u.pairTemplate.split(String(u.pairPlaceholder)).join(id);
+    const base = (u.pair || "").replace(/\/?$/, "");
+    return `${base}/${encodeURIComponent(id)}`;
+}
+
+function getConflictScriptDetailUrl(scriptId) {
+    const u = window.__conflictsUrls;
+    if (!u?.scriptDetailTemplate || u.pairPlaceholder == null) return "#";
+    return u.scriptDetailTemplate.split(String(u.pairPlaceholder)).join(String(scriptId));
+}
+
+/** Çakışmalar sayfasında “Son çözümlenenler” listesine sayfa yenilemeden satır ekler (en fazla 15). */
+function conflictsPrependRecentResolved(row) {
+    if (!row || typeof row !== "object") return;
+    const tbody = document.getElementById("conflictResolvedTableBody");
+    const wrap = document.getElementById("conflictResolvedTableWrap");
+    const hint = document.getElementById("conflictResolvedEmptyHint");
+    const countEl = document.getElementById("conflictResolvedCount");
+    if (!tbody || !wrap || !countEl) return;
+
+    hint?.classList.add("d-none");
+    wrap.classList.remove("d-none");
+
+    const href1 = getConflictScriptDetailUrl(row.scriptId);
+    const href2 = getConflictScriptDetailUrl(row.otherScriptId);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td><span class="small">${escHtml(row.kindDisplay ?? "")}</span></td>
+        <td>
+            <a href="${escHtml(href1)}" class="small">${escHtml(row.scriptName ?? "")}</a>
+            <div class="small text-muted">${escHtml(row.scriptDeveloper ?? "—")}</div>
+        </td>
+        <td>
+            <a href="${escHtml(href2)}" class="small">${escHtml(row.otherScriptName ?? "")}</a>
+            <div class="small text-muted">${escHtml(row.otherDeveloper ?? "—")}</div>
+        </td>
+        <td class="small">${escHtml(row.resolvedByName ?? "—")}</td>
+        <td class="small text-muted">${escHtml(row.resolvedAtDisplay ?? "—")}</td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+
+    const maxRows = 15;
+    while (tbody.rows.length > maxRows) tbody.removeChild(tbody.lastChild);
+
+    countEl.textContent = String(tbody.rows.length);
+}
+
+function conflictReviewTextareasDirty(wrap) {
+    if (!wrap?.dataset) return false;
+    const asql = wrap.querySelector(".cra-sql");
+    const arb = wrap.querySelector(".cra-rb");
+    const bsql = wrap.querySelector(".crb-sql");
+    const brb = wrap.querySelector(".crb-rb");
+    return (
+        (asql?.value ?? "") !== (wrap.dataset.origAsql ?? "") ||
+        (arb?.value ?? "") !== (wrap.dataset.origArb ?? "") ||
+        (bsql?.value ?? "") !== (wrap.dataset.origBsql ?? "") ||
+        (brb?.value ?? "") !== (wrap.dataset.origBrb ?? "")
+    );
+}
+
 /** DB'deki conflict key'ini okunabilir etikete çevirir. Örn: "DDL:USERS" → "Tablo: USERS" */
-function conflictLabel(key) {
+const CONFLICT_TOPIC_SEP = " · ";
+
+function conflictLabelSingle(key) {
     if (!key) return key || "";
     const parts = key.split(":");
     if (parts.length < 2) return key;
@@ -139,6 +206,14 @@ function conflictLabel(key) {
         case "DML":    return `Veri değişikliği: ${obj}`;
         default:       return key;
     }
+}
+
+function conflictLabel(key) {
+    if (!key) return key || "";
+    if (key.includes(CONFLICT_TOPIC_SEP)) {
+        return key.split(CONFLICT_TOPIC_SEP).map((p) => conflictLabelSingle(p.trim())).filter(Boolean).join("; ");
+    }
+    return conflictLabelSingle(key);
 }
 
 function escHtml(str) {
@@ -360,12 +435,12 @@ function escapeHtml(s) {
 }
 
 async function openConflictReviewModal(conflictId) {
-    const pairBase = window.__conflictsUrls?.pair;
-    if (!pairBase) {
+    const pairUrl = getConflictsPairUrl(conflictId);
+    if (!pairUrl) {
         showToast("Sayfa yapılandırması eksik.", "error");
         return;
     }
-    const res = await fetch(pairBase + encodeURIComponent(conflictId), {
+    const res = await fetch(pairUrl, {
         headers: { Accept: "application/json" }
     });
     let d = null;
@@ -387,8 +462,12 @@ async function openConflictReviewModal(conflictId) {
         const roAttr = ro ? "readonly" : "";
         const badge = ro ? "" : `<span id="${cls}-val-badge" class="sw-sql-badge sw-sql-badge--idle ms-2">— kontrol bekleniyor</span>`;
         const valBox = ro ? "" : `<div id="${cls}-val-box" class="alert d-none small mb-0 mt-1 py-2" role="status"></div>`;
+        const det = getConflictScriptDetailUrl(side.id);
         return `<div class="col-lg-6">
-            <h6 class="mb-1">${escapeHtml(side.name || "")}</h6>
+            <div class="d-flex flex-wrap align-items-baseline justify-content-between gap-2 mb-1">
+                <h6 class="mb-0">${escapeHtml(side.name || "")}</h6>
+                <a class="small" href="${det}">Script detayı →</a>
+            </div>
             <div class="small text-muted mb-2">${escapeHtml(side.developer || "")}${ro ? " · salt okunur" : ""}</div>
             <label class="form-label small d-flex align-items-center">SQL${badge}</label>
             <textarea class="form-control font-monospace mb-1 ${cls}-sql" rows="10" ${roAttr}></textarea>
@@ -398,17 +477,32 @@ async function openConflictReviewModal(conflictId) {
         </div>`;
     };
 
+    const canSave = window.__conflictsCanResolve === true;
+    const actionBtns = canSave
+        ? `<div class="d-flex flex-wrap gap-2 justify-content-end">
+            <button type="button" class="btn btn-light" onclick="closeConflictReviewModal()">Kapat</button>
+            <button type="button" class="btn btn-outline-danger" onclick="submitConflictResolveWithoutFix()">Düzeltme yapmadan kapat</button>
+            <button type="button" class="btn btn-primary" onclick="submitConflictReview(true)">Kaydet ve çakışma kaydını kapat</button>
+          </div>`
+        : `<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+            <p class="text-muted small mb-0">Çakışmayı kapatma ve SQL düzenleme yalnızca geliştirici rolündedir; görüntüleme testçi için salt okunurdur.</p>
+            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
+          </div>`;
+
+    const topic = escapeHtml(conflictLabel(d.tableName));
     const html = `
       <div class="cr-wrap" data-conflict-id="${Number(d.conflictId)}" data-a-id="${Number(a.id)}" data-b-id="${Number(b.id)}">
-        <div class="mb-2"><span class="badge text-bg-warning text-dark">${escapeHtml(conflictLabel(d.tableName))}</span></div>
+        <div class="mb-3">
+            <div class="small text-muted mb-1">Çakışma konusu</div>
+            <code class="conflict-modal-topic d-block small p-2 bg-light border rounded" style="white-space:pre-wrap;word-break:break-word">${topic}</code>
+        </div>
         <div class="row g-3">
           ${col(a, "cra")}
           ${col(b, "crb")}
         </div>
-        <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">
-          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
-          <button type="button" class="btn btn-outline-primary" onclick="submitConflictReview(false)">Kaydet</button>
-          <button type="button" class="btn btn-primary" onclick="submitConflictReview(true)">Kaydet ve çakışmayı kapat</button>
+        <div class="mt-3 pt-2 border-top">
+          ${canSave ? `<p class="small text-muted mb-2 mb-md-0"><strong>Kapat</strong> pencereyi kapatır (kaydedilmemiş SQL uyarılır). Çakışma kaydını bitirmek için <strong>Kaydet ve çakışma kaydını kapat</strong> veya <strong>Düzeltme yapmadan kapat</strong>.</p>` : ""}
+          ${actionBtns}
         </div>
       </div>`;
 
@@ -424,8 +518,67 @@ async function openConflictReviewModal(conflictId) {
         if (arb)  arb.value  = a.rollbackScript ?? "";
         if (bsql) bsql.value = b.sqlScript ?? "";
         if (brb)  brb.value  = b.rollbackScript ?? "";
+        w.dataset.origAsql = a.sqlScript ?? "";
+        w.dataset.origArb = a.rollbackScript ?? "";
+        w.dataset.origBsql = b.sqlScript ?? "";
+        w.dataset.origBrb = b.rollbackScript ?? "";
         initConflictReviewValidation(w, a, b);
     }
+}
+
+function closeConflictReviewModal() {
+    const w = document.querySelector(".cr-wrap");
+    if (conflictReviewTextareasDirty(w)) {
+        if (!confirm("Kaydedilmemiş SQL değişiklikleri var. Pencereyi kapatmak istiyor musunuz?")) return;
+    }
+    const modalEl = document.getElementById("globalAppModal");
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+}
+
+async function submitConflictResolveWithoutFix() {
+    const w = document.querySelector(".cr-wrap");
+    const url = window.__conflictsUrls?.resolve;
+    if (!w || !url) {
+        showToast("İşlem adresi eksik.", "error");
+        return;
+    }
+    const cid = Number(w.dataset.conflictId);
+
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ conflictId: cid, resolutionKind: 2 })
+    });
+    let data = null;
+    try {
+        data = await res.json();
+    } catch {
+        /* ignore */
+    }
+    if (!res.ok || data?.success === false) {
+        showToast(data?.message || "İşlem başarısız.", "error");
+        return;
+    }
+    showToast(data?.message || "Çakışma kaydı kapatıldı.", "success");
+    const modalEl = document.getElementById("globalAppModal");
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+
+    const resolvedCid = data?.conflictId ?? cid;
+    const tr = document.querySelector(`tr[data-conflict-id="${resolvedCid}"]`);
+    if (tr) {
+        tr.remove();
+        window.__pgState?.["conflictTableBody"]?.refresh();
+        const h3 = document.querySelector(".conflicts-page .panel-header h3");
+        if (h3) {
+            const remaining = document.querySelectorAll("#conflictTableBody tr").length;
+            h3.textContent = `Açık çakışmalar (${remaining})`;
+        }
+    } else {
+        window.location.reload();
+        return;
+    }
+    if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
+    conflictsPrependRecentResolved(data?.recentResolved);
 }
 
 async function submitConflictReview(markResolved) {
@@ -448,10 +601,13 @@ async function submitConflictReview(markResolved) {
         { scriptId: bid, sqlScript: bsql?.value ?? "", rollbackScript: brb?.value ?? "" }
     ];
 
+    const payload = { conflictId: cid, updates, markResolved };
+    if (markResolved) payload.resolutionKind = 1;
+
     const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ conflictId: cid, updates, markResolved })
+        body: JSON.stringify(payload)
     });
     let data = null;
     try {
@@ -473,16 +629,18 @@ async function submitConflictReview(markResolved) {
         if (tr) {
             tr.remove();
             window.__pgState?.["conflictTableBody"]?.refresh();
-            const h3 = document.querySelector(".panel-header h3");
+            const h3 = document.querySelector(".conflicts-page .panel-header h3");
             if (h3) {
                 const remaining = document.querySelectorAll("#conflictTableBody tr").length;
                 h3.textContent = `Açık çakışmalar (${remaining})`;
             }
         } else {
             window.location.reload();
+            return;
         }
     }
-    void refreshConflictCountBadge();
+    if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
+    conflictsPrependRecentResolved(data?.recentResolved);
 }
 
 function scriptWizardRenderDeveloperOptions(devs) {
@@ -556,6 +714,88 @@ function vtreeToggle(btn) {
     const isOpen = children.classList.toggle("vtree-children--hidden");
     btn.classList.toggle("vtree-toggle--open", !isOpen);
     btn.setAttribute("aria-expanded", isOpen ? "false" : "true");
+}
+
+function jsEscapeForOnclickAttr(s) {
+    return String(s ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function openRenamePoolBatchModal(batchId, currentName) {
+    const content = `
+        <div class="mb-3">
+            <label class="form-label small mb-1" for="renamePoolBatchInput">Klasör adı</label>
+            <input type="text" class="form-control" id="renamePoolBatchInput" maxlength="200" autocomplete="off" />
+        </div>
+        <button type="button" class="btn btn-primary" onclick="submitRenamePoolBatch(${batchId})">Kaydet</button>`;
+    openGlobalModal("Klasör adını düzenle", content);
+    requestAnimationFrame(() => {
+        const el = document.getElementById("renamePoolBatchInput");
+        if (el) {
+            el.value = currentName ?? "";
+            el.focus();
+            el.select();
+        }
+    });
+}
+
+async function submitRenamePoolBatch(batchId) {
+    const url = window.__batchesPageUrls?.renamePoolBatch;
+    if (!url) {
+        showToast("Kayıt adresi tanımlı değil.", "error");
+        return;
+    }
+    const input = document.getElementById("renamePoolBatchInput");
+    const name = (input?.value ?? "").trim();
+    if (!name) {
+        showToast("Ad zorunludur.", "error");
+        return;
+    }
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ batchId, name })
+    });
+    let data = null;
+    try {
+        data = await res.json();
+    } catch (_) {}
+    if (!res.ok || data?.success === false) {
+        showToast(data?.message || "Güncellenemedi.", "error");
+        return;
+    }
+    const newName = data?.name ?? name;
+    showToast(data?.message || "Ad güncellendi.", "success");
+    const row = document.querySelector(`.vtree-row[data-batch-id="${batchId}"]`);
+    if (row) {
+        const safe = jsEscapeForOnclickAttr(newName);
+        const lr = row.getAttribute("data-linked-release") || "0";
+        const nameEl = row.querySelector(".vtree-name");
+        if (nameEl) nameEl.textContent = newName;
+        const label = row.querySelector(".vtree-label.vtree-label--clickable");
+        if (label) {
+            label.setAttribute(
+                "onclick",
+                `openFolderActionModal(${batchId}, '${safe}', true, true, ${lr})`
+            );
+        }
+        const editBtn = row.querySelector(".vtree-edit-btn");
+        if (editBtn) {
+            editBtn.setAttribute(
+                "onclick",
+                `event.stopPropagation(); openRenamePoolBatchModal(${batchId}, '${safe}')`
+            );
+        }
+        const delBtn = row.querySelector(".vtree-delete-btn");
+        if (delBtn) {
+            delBtn.setAttribute(
+                "onclick",
+                `event.stopPropagation(); deletePoolBatch(${batchId}, '${safe}')`
+            );
+        }
+    }
+    const modalEl = document.getElementById("globalAppModal");
+    const m = modalEl ? bootstrap.Modal.getInstance(modalEl) : null;
+    if (m) m.hide();
 }
 
 /** Klasör seçim modalı: alt klasör ekle / script ekle */
@@ -738,8 +978,10 @@ async function deletePoolBatch(batchId, name) {
     }
     showToast(data?.message || "Silindi.", "success");
     // Ağaç elemanını DOM'dan kaldır
-    const li = document.querySelector(`.vtree-item [onclick*="openFolderActionModal(${batchId},"]`)?.closest(".vtree-item")
-            || document.querySelector(`.vtree-delete-btn[onclick*="deletePoolBatch(${batchId},"]`)?.closest(".vtree-item");
+    const li =
+        document.querySelector(`.vtree-row[data-batch-id="${batchId}"]`)?.closest(".vtree-item") ||
+        document.querySelector(`.vtree-item [onclick*="openFolderActionModal(${batchId},"]`)?.closest(".vtree-item") ||
+        document.querySelector(`.vtree-delete-btn[onclick*="deletePoolBatch(${batchId},"]`)?.closest(".vtree-item");
     if (li) li.remove();
     else window.location.reload();
 }
@@ -1316,7 +1558,7 @@ function appendScriptRowFromCreateResponse(data) {
         ? `<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteScriptFromList(${Number(scriptId)}, this)">Sil</button>`
         : "";
 
-    const badgeCls = { Draft: "script-badge--draft", Ready: "script-badge--ready", Conflict: "script-badge--conflict" }[statusKey] ?? "script-badge--draft";
+    const badgeCls = { Draft: "script-badge--draft", PendingTesterReview: "script-badge--pending", Ready: "script-badge--ready", Conflict: "script-badge--conflict" }[statusKey] ?? "script-badge--draft";
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -1335,6 +1577,36 @@ function appendScriptRowFromCreateResponse(data) {
         filterInput.dispatchEvent(new Event("input"));
     } else {
         window.__pgState?.["scriptTableBody"]?.refresh(true);
+    }
+}
+
+async function sendScriptToTesterInline(scriptId, btn) {
+    const url = window.__scriptsPageUrls?.changeStatus;
+    if (!url) { showToast("URL tanımlı değil.", "error"); return; }
+    btn.disabled = true;
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ scriptId, newStatus: 2 })
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* ignore */ }
+    if (!res.ok || data?.success === false) {
+        showToast(data?.message || "Gönderilemedi.", "error");
+        btn.disabled = false;
+        return;
+    }
+    showToast(data?.message || "Testçiye gönderildi.", "success");
+    const td = btn.closest("td");
+    if (td) {
+        const badge = td.querySelector(".script-badge");
+        if (badge) {
+            badge.className = "script-badge script-badge--pending";
+            badge.textContent = "Testçi incelemesinde";
+        }
+        btn.remove();
+        const readyBtn = td.querySelector(".btn-inline-ready");
+        readyBtn?.remove();
     }
 }
 
@@ -1366,6 +1638,7 @@ async function markScriptReadyInline(scriptId, btn) {
             badge.className = "script-badge script-badge--ready";
             badge.textContent = "Hazır";
         }
+        td.querySelector(".btn-inline-send")?.remove();
         btn.remove();
     }
 }

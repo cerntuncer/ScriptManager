@@ -45,17 +45,26 @@
                 @foreach (var item in Model.Scripts)
                 {
                     var canMarkReady = AuthHelper.CanMarkDraftScriptReady(User, item.DeveloperId, item.StatusEnum);
+                    var canSendTester = AuthHelper.CanSendDraftToTester(User, item.DeveloperId, item.StatusEnum);
+                    var canApproveQa = AuthHelper.CanApprovePendingTesterReview(User, item.StatusEnum);
                     var statusBadgeCls = item.StatusEnum switch {
-                        ScriptStatus.Ready    => "script-badge script-badge--ready",
-                        ScriptStatus.Draft    => "script-badge script-badge--draft",
-                        ScriptStatus.Conflict => "script-badge script-badge--conflict",
-                        _                     => "script-badge"
+                        ScriptStatus.Ready                  => "script-badge script-badge--ready",
+                        ScriptStatus.Draft                  => "script-badge script-badge--draft",
+                        ScriptStatus.PendingTesterReview    => "script-badge script-badge--pending",
+                        ScriptStatus.Conflict               => "script-badge script-badge--conflict",
+                        _                                   => "script-badge"
                     };
                     <tr data-filter-hidden="0">
                         <td><a href="@Url.Action("Detail", "Scripts", new { id = item.ScriptId })" class="table-link">@item.Name</a></td>
                         <td>
                             <span class="@statusBadgeCls">@item.StatusDisplay</span>
-                            @if (canMarkReady)
+                            @if (canSendTester)
+                            {
+                                <button type="button" class="btn-inline-send"
+                                        onclick="sendScriptToTesterInline(@item.ScriptId, this)"
+                                        title="Testçiye gönder">→</button>
+                            }
+                            @if (canMarkReady || canApproveQa)
                             {
                                 <button type="button" class="btn-inline-ready"
                                         onclick="markScriptReadyInline(@item.ScriptId, this)"

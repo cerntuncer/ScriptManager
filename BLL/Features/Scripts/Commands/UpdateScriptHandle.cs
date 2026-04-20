@@ -1,4 +1,4 @@
-using BLL.Services;
+﻿using BLL.Services;
 using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
@@ -117,10 +117,25 @@ namespace BLL.Features.Scripts.Commands
                     return new UpdateScriptResponse { Success = false, Message = "Silme için silme endpoint'ini kullanın." };
                 if (newStatus == ScriptStatus.Ready)
                 {
+                    if (script.Status != ScriptStatus.Draft && script.Status != ScriptStatus.PendingTesterReview)
+                        return new UpdateScriptResponse { Success = false, Message = "Yalnızca Taslak veya testçi incelemesindeki scriptler Hazır yapılabilir." };
+                }
+
+                if (newStatus == ScriptStatus.PendingTesterReview)
+                {
                     if (script.Status != ScriptStatus.Draft)
-                        return new UpdateScriptResponse { Success = false, Message = "Yalnızca Taslak scriptler Hazır yapılabilir." };
+                        return new UpdateScriptResponse { Success = false, Message = "Yalnızca Taslak scriptler testçiye gönderilebilir." };
+                }
+
+                if (newStatus is ScriptStatus.Ready or ScriptStatus.PendingTesterReview)
+                {
                     if (await _conflictSync.HasUnresolvedConflictsAsync(script.Id, cancellationToken))
-                        return new UpdateScriptResponse { Success = false, Message = "Açık çakışması varken Hazır yapılamaz." };
+                        return new UpdateScriptResponse
+                        {
+                            Success = false,
+                            Message =
+                                "Açık çakışma kaydı varken Hazır veya testçi adımına geçilemez. Çakışmalar sayfasından çözün veya scriptleri düzeltin."
+                        };
                 }
             }
 

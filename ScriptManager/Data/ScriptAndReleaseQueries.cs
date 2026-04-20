@@ -14,6 +14,7 @@ public static class ScriptReadQueries
         s switch
         {
             ScriptStatus.Draft => "Taslak",
+            ScriptStatus.PendingTesterReview => "Testçi incelemesinde",
             ScriptStatus.Ready => "Hazır",
             ScriptStatus.Conflict => "Çakışma",
             ScriptStatus.Deleted => "Silindi",
@@ -167,7 +168,7 @@ public static class ReleaseReadQueries
                     yield return s;
             }
 
-            foreach (var s in b.Scripts.Where(IsScriptActive).OrderBy(x => x.Name).ThenBy(x => x.Id))
+            foreach (var s in b.Scripts.Where(IsScriptActive).OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id))
                 yield return s;
         }
 
@@ -306,7 +307,7 @@ public static class ReleaseReadQueries
                 BatchId = b.Id,
                 Name = b.Name,
                 Folders = subs.Select(MapFolder).ToList(),
-                Scripts = b.Scripts.Where(IsScriptActive).OrderBy(s => s.Name).ThenBy(s => s.Id)
+                Scripts = b.Scripts.Where(IsScriptActive).OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id)
                     .Select(s => ScriptReadQueries.ToReleaseScriptItem(s,
                         orderByScriptId.GetValueOrDefault(s.Id, 0),
                         b.Name))

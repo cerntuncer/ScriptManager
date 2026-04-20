@@ -4,6 +4,7 @@ using DAL.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(MyContext))]
-    partial class MyContextModelSnapshot : ModelSnapshot
+    [Migration("20260420104505_ConflictResolutionKind")]
+    partial class ConflictResolutionKind
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -87,14 +90,14 @@ namespace DAL.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<int?>("ResolutionKind")
-                        .HasColumnType("int");
-
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<long?>("ResolvedBy")
                         .HasColumnType("bigint");
+
+                    b.Property<int?>("ResolutionKind")
+                        .HasColumnType("int");
 
                     b.Property<long>("ScriptId")
                         .HasColumnType("bigint");
@@ -104,7 +107,8 @@ namespace DAL.Migrations
 
                     b.Property<string>("TableName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -118,56 +122,6 @@ namespace DAL.Migrations
                     b.HasIndex("ScriptId");
 
                     b.ToTable("Conflicts", (string)null);
-                });
-
-            modelBuilder.Entity("DAL.Entities.ConflictPairDismissal", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("ResolutionKind")
-                        .HasColumnType("int");
-
-                    b.Property<long?>("ResolvedByUserId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("ScriptIdMax")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("ScriptIdMin")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("SqlFingerprintMax")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("SqlFingerprintMin")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ResolvedByUserId");
-
-                    b.HasIndex("ScriptIdMax");
-
-                    b.HasIndex("ScriptIdMin", "ScriptIdMax");
-
-                    b.ToTable("ConflictPairDismissals", (string)null);
                 });
 
             modelBuilder.Entity("DAL.Entities.Release", b =>
@@ -430,32 +384,6 @@ namespace DAL.Migrations
                     b.Navigation("ResolvedByUser");
 
                     b.Navigation("Script");
-                });
-
-            modelBuilder.Entity("DAL.Entities.ConflictPairDismissal", b =>
-                {
-                    b.HasOne("DAL.Entities.User", "ResolvedByUser")
-                        .WithMany()
-                        .HasForeignKey("ResolvedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("DAL.Entities.Script", "ScriptMax")
-                        .WithMany()
-                        .HasForeignKey("ScriptIdMax")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Entities.Script", "ScriptMin")
-                        .WithMany()
-                        .HasForeignKey("ScriptIdMin")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ResolvedByUser");
-
-                    b.Navigation("ScriptMax");
-
-                    b.Navigation("ScriptMin");
                 });
 
             modelBuilder.Entity("DAL.Entities.Release", b =>

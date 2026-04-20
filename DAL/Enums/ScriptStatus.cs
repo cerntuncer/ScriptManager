@@ -9,6 +9,8 @@ namespace DAL.Enums
     public enum ScriptStatus
     {
         Draft = 1,
+        /// <summary>Geliştirici testçiye gönderdi; yalnızca testçi Hazır yapabilir.</summary>
+        PendingTesterReview = 2,
         Ready = 3,
         Conflict = 4,
         Deleted = 5

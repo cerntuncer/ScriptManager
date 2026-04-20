@@ -1,3 +1,4 @@
+using System.Linq;
 using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
@@ -21,28 +22,43 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
             .FirstOrDefaultAsync(s => s.Id == scriptId && !s.IsDeleted, cancellationToken);
         if (script == null || script.Status == ScriptStatus.Deleted) return;
 
+        await InvalidateDismissalsIfSqlChangedAsync(script.Id, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+
         var myKeys = SqlConflictKeyExtractor.ExtractFromScript(script.SqlScript, script.RollbackScript);
         var peers  = await GetPeerScriptsAsync(script, cancellationToken);
 
-        var desired = new HashSet<(long Min, long Max, string Key)>();
+        var desired = new Dictionary<(long Min, long Max), PairAgg>();
         foreach (var peer in peers)
         {
             if (peer.Id == script.Id) continue;
             var peerKeys = SqlConflictKeyExtractor.ExtractFromScript(peer.SqlScript, peer.RollbackScript);
             var min = Math.Min(script.Id, peer.Id);
             var max = Math.Max(script.Id, peer.Id);
+            var pair = (min, max);
 
-            // Tüm key çiftlerini kural matrisi ile karşılaştır, çakışanları topla
-            var topics = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var mk in myKeys)
             foreach (var pk in peerKeys)
             {
                 if (!ConflictKey.DoConflict(mk, pk)) continue;
-                topics.Add(ConflictKey.CanonicalKey(mk, pk));
-            }
+                var topic = ConflictKey.CanonicalKey(mk, pk);
+                var sev = ConflictKey.SeverityForPair();
+                if (!desired.TryGetValue(pair, out var agg))
+                {
+                    agg = new PairAgg();
+                    desired[pair] = agg;
+                }
 
-            foreach (var topic in topics)
-                desired.Add((min, max, topic));
+                agg.Topics.Add(topic);
+                if ((int)sev < (int)agg.Severity)
+                    agg.Severity = sev;
+            }
+        }
+
+        foreach (var key in desired.Keys.ToList())
+        {
+            if (await PairIsActivelyDismissedAsync(key.Min, key.Max, cancellationToken))
+                desired.Remove(key);
         }
 
         var existingRows = await _db.Conflicts
@@ -54,35 +70,71 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         foreach (var peer in peers)
             affectedScriptIds.Add(peer.Id);
 
-        var existingKeys = new HashSet<(long Min, long Max, string Key)>();
-        foreach (var c in existingRows)
+        var byPair = existingRows
+            .GroupBy(c => (
+                Min: Math.Min(c.ScriptId, c.ConflictingScriptId),
+                Max: Math.Max(c.ScriptId, c.ConflictingScriptId)))
+            .ToList();
+
+        var handledDesiredPairs = new HashSet<(long Min, long Max)>();
+
+        foreach (var grp in byPair)
         {
-            var min = Math.Min(c.ScriptId, c.ConflictingScriptId);
-            var max = Math.Max(c.ScriptId, c.ConflictingScriptId);
-            var key = (min, max, c.TableName);
-            if (!desired.Contains(key))
+            var pair = grp.Key;
+            if (!desired.TryGetValue(pair, out var want))
+            {
+                foreach (var c in grp)
+                {
+                    _db.Conflicts.Remove(c);
+                    affectedScriptIds.Add(c.ScriptId);
+                    affectedScriptIds.Add(c.ConflictingScriptId);
+                }
+
+                continue;
+            }
+
+            var combined = ConflictKey.CombineTopics(want.Topics);
+            var ordered = grp.OrderBy(c => c.Id).ToList();
+            var keeper = ordered[0];
+
+            foreach (var c in ordered.Skip(1))
             {
                 _db.Conflicts.Remove(c);
                 affectedScriptIds.Add(c.ScriptId);
                 affectedScriptIds.Add(c.ConflictingScriptId);
             }
-            else
-                existingKeys.Add(key);
+
+            if (keeper.ScriptId != pair.Min || keeper.ConflictingScriptId != pair.Max ||
+                keeper.TableName != combined || keeper.Severity != want.Severity)
+            {
+                keeper.ScriptId = pair.Min;
+                keeper.ConflictingScriptId = pair.Max;
+                keeper.TableName = combined;
+                keeper.Severity = want.Severity;
+                _db.Conflicts.Update(keeper);
+            }
+
+            handledDesiredPairs.Add(pair);
         }
 
-        foreach (var d in desired)
+        foreach (var kvp in desired)
         {
-            if (existingKeys.Contains(d)) continue;
+            var pair = kvp.Key;
+            if (handledDesiredPairs.Contains(pair)) continue;
+
+            var want = kvp.Value;
+            var combined = ConflictKey.CombineTopics(want.Topics);
             var row = new Conflict
             {
-                ScriptId = d.Min,
-                ConflictingScriptId = d.Max,
-                TableName = d.Key,
+                ScriptId = pair.Min,
+                ConflictingScriptId = pair.Max,
+                TableName = combined,
+                Severity = want.Severity,
                 DetectedAt = DateTime.UtcNow
             };
             await _db.Conflicts.AddAsync(row, cancellationToken);
-            affectedScriptIds.Add(d.Min);
-            affectedScriptIds.Add(d.Max);
+            affectedScriptIds.Add(pair.Min);
+            affectedScriptIds.Add(pair.Max);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -91,13 +143,12 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
             await ApplyConflictStatusForScriptAsync(sid, cancellationToken);
     }
 
-    public Task<bool> HasUnresolvedConflictsAsync(long scriptId, CancellationToken cancellationToken = default)
-    {
-        return _db.Conflicts.AsNoTracking()
-            .AnyAsync(c => c.ResolvedAt == null &&
-                           (c.ScriptId == scriptId || c.ConflictingScriptId == scriptId),
-                cancellationToken);
-    }
+    public async Task<bool> HasUnresolvedConflictsAsync(long scriptId, CancellationToken cancellationToken = default) =>
+        await _db.Conflicts.AsNoTracking().AnyAsync(c =>
+                !c.IsDeleted &&
+                c.ResolvedAt == null &&
+                (c.ScriptId == scriptId || c.ConflictingScriptId == scriptId),
+            cancellationToken);
 
     public Task RecomputeScriptStatusAsync(long scriptId, CancellationToken cancellationToken = default) =>
         ApplyConflictStatusForScriptAsync(scriptId, cancellationToken);
@@ -107,6 +158,85 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         await ApplyConflictStatusForScriptAsync(scriptId, cancellationToken);
         if (otherScriptId != scriptId)
             await ApplyConflictStatusForScriptAsync(otherScriptId, cancellationToken);
+    }
+
+    public async Task RemoveOpenConflictWithDismissalAsync(long conflictId, long resolvedByUserId,
+        ConflictResolutionKind kind, CancellationToken cancellationToken = default)
+    {
+        var row = await _db.Conflicts.FirstOrDefaultAsync(c => c.Id == conflictId && !c.IsDeleted, cancellationToken);
+        if (row == null) return;
+
+        var min = Math.Min(row.ScriptId, row.ConflictingScriptId);
+        var max = Math.Max(row.ScriptId, row.ConflictingScriptId);
+
+        var sMin = await _db.Scripts.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == min && !s.IsDeleted, cancellationToken);
+        var sMax = await _db.Scripts.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == max && !s.IsDeleted, cancellationToken);
+
+        var existingDismissals = await _db.ConflictPairDismissals
+            .Where(d => d.ScriptIdMin == min && d.ScriptIdMax == max)
+            .ToListAsync(cancellationToken);
+        foreach (var d in existingDismissals)
+            _db.ConflictPairDismissals.Remove(d);
+
+        if (sMin != null && sMax != null)
+        {
+            await _db.ConflictPairDismissals.AddAsync(new ConflictPairDismissal
+            {
+                ScriptIdMin = min,
+                ScriptIdMax = max,
+                SqlFingerprintMin = ScriptSqlFingerprint.Compute(sMin),
+                SqlFingerprintMax = ScriptSqlFingerprint.Compute(sMax),
+                ResolvedByUserId = resolvedByUserId,
+                ResolutionKind = kind,
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
+            }, cancellationToken);
+        }
+
+        _db.Conflicts.Remove(row);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task InvalidateDismissalsIfSqlChangedAsync(long scriptId, CancellationToken cancellationToken)
+    {
+        var list = await _db.ConflictPairDismissals
+            .Where(x => x.ScriptIdMin == scriptId || x.ScriptIdMax == scriptId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var d in list)
+        {
+            var smin = await _db.Scripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == d.ScriptIdMin && !s.IsDeleted, cancellationToken);
+            var smax = await _db.Scripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == d.ScriptIdMax && !s.IsDeleted, cancellationToken);
+            if (smin == null || smax == null)
+            {
+                _db.ConflictPairDismissals.Remove(d);
+                continue;
+            }
+
+            if (ScriptSqlFingerprint.Compute(smin) != d.SqlFingerprintMin ||
+                ScriptSqlFingerprint.Compute(smax) != d.SqlFingerprintMax)
+                _db.ConflictPairDismissals.Remove(d);
+        }
+    }
+
+    private async Task<bool> PairIsActivelyDismissedAsync(long minId, long maxId, CancellationToken cancellationToken)
+    {
+        var d = await _db.ConflictPairDismissals.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.ScriptIdMin == minId && x.ScriptIdMax == maxId, cancellationToken);
+        if (d == null) return false;
+
+        var smin = await _db.Scripts.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == minId && !s.IsDeleted, cancellationToken);
+        var smax = await _db.Scripts.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == maxId && !s.IsDeleted, cancellationToken);
+        if (smin == null || smax == null) return false;
+
+        return ScriptSqlFingerprint.Compute(smin) == d.SqlFingerprintMin &&
+               ScriptSqlFingerprint.Compute(smax) == d.SqlFingerprintMax;
     }
 
     private async Task<List<Script>> GetPeerScriptsAsync(Script script, CancellationToken cancellationToken)
@@ -232,12 +362,13 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         var script = await _db.Scripts.FirstOrDefaultAsync(s => s.Id == scriptId && !s.IsDeleted, cancellationToken);
         if (script == null || script.Status == ScriptStatus.Deleted) return;
 
-        var open = await _db.Conflicts.AsNoTracking()
-            .AnyAsync(c => c.ResolvedAt == null &&
-                           (c.ScriptId == scriptId || c.ConflictingScriptId == scriptId),
-                cancellationToken);
+        var hasOpen = await _db.Conflicts.AsNoTracking().AnyAsync(c =>
+                !c.IsDeleted &&
+                c.ResolvedAt == null &&
+                (c.ScriptId == scriptId || c.ConflictingScriptId == scriptId),
+            cancellationToken);
 
-        if (open)
+        if (hasOpen)
         {
             if (script.Status != ScriptStatus.Conflict)
             {
@@ -246,16 +377,76 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
                 _db.Scripts.Update(script);
             }
         }
-        else
+        else if (script.Status == ScriptStatus.Conflict)
         {
-            if (script.Status == ScriptStatus.Conflict)
+            script.Status = script.StatusBeforeConflict ?? ScriptStatus.Draft;
+            script.StatusBeforeConflict = null;
+            _db.Scripts.Update(script);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task NormalizeDuplicateOpenConflictsAsync(CancellationToken cancellationToken = default)
+    {
+        var open = await _db.Conflicts
+            .Where(c => c.ResolvedAt == null && !c.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var dupGroups = open
+            .GroupBy(c => (
+                Min: Math.Min(c.ScriptId, c.ConflictingScriptId),
+                Max: Math.Max(c.ScriptId, c.ConflictingScriptId)))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        if (dupGroups.Count == 0) return;
+
+        var affectedIds = new HashSet<long>();
+
+        foreach (var g in dupGroups)
+        {
+            var pair = g.Key;
+            var topics = new HashSet<string>(StringComparer.Ordinal);
+            var severity = ConflictSeverity.ReviewAdvised;
+
+            foreach (var c in g)
             {
-                script.Status = script.StatusBeforeConflict ?? ScriptStatus.Draft;
-                script.StatusBeforeConflict = null;
-                _db.Scripts.Update(script);
+                foreach (var t in ConflictKey.SplitStoredTopics(c.TableName))
+                    topics.Add(t);
+                if ((int)c.Severity < (int)severity)
+                    severity = c.Severity;
+            }
+
+            var combined = ConflictKey.CombineTopics(topics);
+            var ordered = g.OrderBy(c => c.Id).ToList();
+            var keeper = ordered[0];
+
+            keeper.ScriptId = pair.Min;
+            keeper.ConflictingScriptId = pair.Max;
+            keeper.TableName = combined;
+            keeper.Severity = severity;
+            _db.Conflicts.Update(keeper);
+            affectedIds.Add(keeper.ScriptId);
+            affectedIds.Add(keeper.ConflictingScriptId);
+
+            foreach (var c in ordered.Skip(1))
+            {
+                affectedIds.Add(c.ScriptId);
+                affectedIds.Add(c.ConflictingScriptId);
+                _db.Conflicts.Remove(c);
             }
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+
+        foreach (var sid in affectedIds)
+            await ApplyConflictStatusForScriptAsync(sid, cancellationToken);
+    }
+
+    private sealed class PairAgg
+    {
+        public HashSet<string> Topics { get; } = new(StringComparer.Ordinal);
+        public ConflictSeverity Severity { get; set; } = ConflictSeverity.ReviewAdvised;
     }
 }

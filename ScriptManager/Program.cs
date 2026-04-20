@@ -11,24 +11,39 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Development: her dotnet run / yeniden başlatmada farklı çerez adı → tarayıcıdaki eski oturum kullanılmaz, giriş ekranı gelir.
+var authCookieName = builder.Environment.IsDevelopment()
+    ? $"ScriptManager.Auth.{Guid.NewGuid():N}"
+    : "ScriptManager.Auth";
+
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    // Tüm MVC aksiyonları oturum ister; yalnızca [AllowAnonymous] işaretli olanlar (Login, Error vb.) açılır.
+    options.Filters.Add(new AuthorizeFilter(
+        new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build()));
+});
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = "ScriptManager.Auth";
+        options.Cookie.Name = authCookieName;
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromHours(12);
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
     });
 
 builder.Services.AddAuthorization(options =>

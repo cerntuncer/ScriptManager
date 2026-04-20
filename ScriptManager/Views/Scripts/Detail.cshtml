@@ -4,6 +4,8 @@
     var canDelete = ViewBag.CanDelete as bool? == true;
     var st = Model.StatusEnum;
     var canMarkDraftReady = ViewBag.CanMarkDraftReady as bool? == true;
+    var canSendToTester = ViewBag.CanSendToTester as bool? == true;
+    var canApproveTesterReview = ViewBag.CanApproveTesterReview as bool? == true;
     var canEditDraftScript = ViewBag.CanEditDraftScript as bool? == true;
 }
 
@@ -30,22 +32,44 @@
     </div>
     <div class="p-3">
         <p class="small text-muted mb-3 mb-md-2">
-            Yeni kayıt <strong>Taslak</strong>tır. Geliştirici (kendi scripti), <strong>testçi</strong> veya yönetici taslakları <strong>Hazır</strong> yapabilir.
-            Test gerekmiyorsa geliştirici doğrudan hazırlayabilir; QA akışında testçi onaylar.
-            <strong>Çakışma</strong> aynı sürümde tablo örtüşmesinde sistem tarafından işaretlenir; açık çakışma varken Hazır yapılamaz.
+            <strong>Taslak</strong>: geliştirici <strong>Testçiye gönderebilir</strong> veya (kendi scriptinde) doğrudan <strong>Hazır</strong> yapabilir; testçi herhangi bir taslağı Hazır yapabilir.
+            <strong>Testçi incelemesinde</strong>: yalnızca testçi <strong>Hazır</strong> onayı verir.
+            <strong>Çakışma</strong>: aynı sürümde örtüşen SQL tespit edildiğinde script bu duruma alınır; <a href="@Url.Action("Index", "Conflicts")">Çakışmalar</a> sayfasında çözülene kadar Hazır ve testçi adımları kapalıdır.
         </p>
         @if (st == ScriptStatus.Conflict)
         {
-            <div class="alert alert-warning mb-0 py-2 small">Bu script çakışma kapsamında. Çakışmalar sayfasından inceleyip çözün veya metinleri güncelleyin; açık çakışma varken Hazır yapılamaz.</div>
+            <p class="small text-warning mb-0">
+                Bu script <strong>çakışma</strong> durumunda. <a href="@Url.Action("Index", "Conflicts")">Çakışmalar</a> sayfasından ilgili kaydı görüntüleyin; geliştirici çözümledikten sonra durumunuz çakışma öncesi (ör. Taslak) haline döner.
+            </p>
         }
         else if (st == ScriptStatus.Ready)
         {
             <p class="mb-0 small text-success">Bu script <strong>hazır</strong> — paketleme ve sonraki adımlar için uygun.</p>
         }
-        else if (canMarkDraftReady)
+        else if (st == ScriptStatus.PendingTesterReview)
+        {
+            @if (canApproveTesterReview)
+            {
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Onayla — Hazır yap</button>
+                </div>
+            }
+            else
+            {
+                <p class="text-muted small mb-0">Bu script testçi incelemesinde. Onayı testçi verir.</p>
+            }
+        }
+        else if (canSendToTester || canMarkDraftReady)
         {
             <div class="d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Hazır olarak işaretle</button>
+                @if (canSendToTester)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.PendingTesterReview))">Testçiye gönder</button>
+                }
+                @if (canMarkDraftReady)
+                {
+                    <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Hazır olarak işaretle</button>
+                }
             </div>
         }
         else

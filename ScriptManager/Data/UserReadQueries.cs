@@ -41,7 +41,7 @@ public static class UserReadQueries
         role switch
         {
             UserRole.Developer =>
-                "Script ve sürüm/versiyon/çakışma yönetimi; kullanıcı listesi. Kendi taslak scriptini Hazır yapabilir; ayrıca testçi QA yapar.",
+                "Script ve sürüm/versiyon/çakışma yönetimi. Taslağı testçiye gönderebilir veya kendi scriptinde doğrudan Hazır yapabilir.",
             UserRole.Tester =>
                 "Taslak scriptleri test edip Hazır işaretler. Sürüme yalnızca tüm scriptler Hazır olunca çıkılır.",
             _ => "—"

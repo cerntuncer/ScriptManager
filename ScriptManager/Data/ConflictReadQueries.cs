@@ -1,5 +1,6 @@
 using DAL.Context;
 using DAL.Entities;
+using DAL.Enums;
 using Microsoft.EntityFrameworkCore;
 using ScriptManager.Models.Conflict;
 
@@ -21,17 +22,33 @@ public static class ConflictReadQueries
 
     public static async Task<List<ConflictRowViewModel>> ListRecentlyResolvedAsync(MyContext db, int take = 15)
     {
-        var rows = await db.Conflicts.AsNoTracking()
-            .Include(c => c.Script).ThenInclude(s => s.Developer)
-            .Include(c => c.ConflictingScript).ThenInclude(s => s.Developer)
-            .Include(c => c.ResolvedByUser)
-            .Where(c => c.ResolvedAt != null && !c.IsDeleted)
-            .OrderByDescending(c => c.ResolvedAt)
+        var rows = await db.ConflictPairDismissals.AsNoTracking()
+            .Include(d => d.ScriptMin)!.ThenInclude(s => s!.Developer)
+            .Include(d => d.ScriptMax)!.ThenInclude(s => s!.Developer)
+            .Include(d => d.ResolvedByUser)
+            .OrderByDescending(d => d.CreatedAt)
             .Take(take)
             .ToListAsync();
 
-        return rows.Select(ToViewModel).ToList();
+        return rows.Select(DismissalToViewModel).ToList();
     }
+
+    private static ConflictRowViewModel DismissalToViewModel(ConflictPairDismissal d) => new()
+    {
+        ConflictId      = d.Id,
+        TableName       = "",
+        DetectedAt      = d.CreatedAt,
+        ResolvedAt      = d.CreatedAt,
+        ResolvedByName  = d.ResolvedByUser?.Name,
+        ResolutionKind  = d.ResolutionKind,
+        Severity        = ConflictSeverity.ReviewAdvised,
+        ScriptId        = d.ScriptIdMin,
+        ScriptName      = d.ScriptMin?.Name ?? $"#{d.ScriptIdMin}",
+        ScriptDeveloper = d.ScriptMin?.Developer?.Name ?? "—",
+        OtherScriptId   = d.ScriptIdMax,
+        OtherScriptName = d.ScriptMax?.Name ?? $"#{d.ScriptIdMax}",
+        OtherDeveloper  = d.ScriptMax?.Developer?.Name ?? "—"
+    };
 
     private static ConflictRowViewModel ToViewModel(Conflict c) => new()
     {
@@ -40,6 +57,8 @@ public static class ConflictReadQueries
         DetectedAt      = c.DetectedAt,
         ResolvedAt      = c.ResolvedAt,
         ResolvedByName  = c.ResolvedByUser?.Name,
+        ResolutionKind  = c.ResolutionKind,
+        Severity        = c.Severity,
         ScriptId        = c.ScriptId,
         ScriptName      = c.Script?.Name ?? $"#{c.ScriptId}",
         ScriptDeveloper = c.Script?.Developer?.Name ?? "—",

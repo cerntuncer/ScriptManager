@@ -49,7 +49,8 @@
             treeChildren = Url.Action("TreeChildren", "Batches"),
             batchPath = Url.Action("BatchPath", "Batches"),
             releaseDetailBase = Url.Action("Detail", "Releases", new { id = 999999999L }).Replace("999999999", ""),
-            deletePoolBatch = Url.Action("DeletePoolBatch", "Batches")
+            deletePoolBatch = Url.Action("DeletePoolBatch", "Batches"),
+            renamePoolBatch = Url.Action("RenamePoolBatch", "Batches")
         }));
         window.__scriptCreateMeta = { developers: @Html.Raw(devJson) };
         window.__scriptsPageUrls = @Html.Raw(JsonSerializer.Serialize(new {

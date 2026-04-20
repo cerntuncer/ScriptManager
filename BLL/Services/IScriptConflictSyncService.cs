@@ -1,3 +1,5 @@
+using DAL.Enums;
+
 namespace BLL.Services;
 
 public interface IScriptConflictSyncService
@@ -12,4 +14,13 @@ public interface IScriptConflictSyncService
 
     /// <summary>İki scripti birlikte yeniden değerlendirir (çözüm sonrası).</summary>
     Task RecomputeScriptsAfterConflictChangeAsync(long scriptId, long otherScriptId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Aynı iki script arasında birden fazla açık çakışma satırı kaldıysa tek satırda birleştirir; konular konu alanında toplanır.
+    /// </summary>
+    Task NormalizeDuplicateOpenConflictsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Açık çakışma satırını siler; aynı SQL kalsın bile otomatik yeniden açılmaması için çift özeti kaydeder.</summary>
+    Task RemoveOpenConflictWithDismissalAsync(long conflictId, long resolvedByUserId, ConflictResolutionKind kind,
+        CancellationToken cancellationToken = default);
 }

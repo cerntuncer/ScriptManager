@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 
 namespace DAL.Enums
 {
+    /// <summary>
+    /// Uygulamada yalnızca bu iki rol vardır; ayrı bir yönetici rolü yoktur.
+    /// </summary>
     public enum UserRole
     {
         Developer = 1,

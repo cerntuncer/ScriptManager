@@ -1,5 +1,6 @@
 using BLL.Services;
 using DAL.Entities;
+using DAL.Enums;
 using DAL.Repositories.Interfaces;
 using MediatR;
 
@@ -27,18 +28,21 @@ public class ResolveConflictHandle : IRequestHandler<ResolveConflictRequest, Res
         if (row.ResolvedAt != null)
             return new ResolveConflictResponse { Success = false, Message = "Bu çakışma zaten çözümlenmiş." };
 
-        row.ResolvedBy = request.UserId;
-        row.ResolvedAt = DateTime.UtcNow;
-        _conflictRepository.Update(row);
-        await _conflictRepository.SaveAsync();
+        var sidA = row.ScriptId;
+        var sidB = row.ConflictingScriptId;
+        await _conflictSync.RemoveOpenConflictWithDismissalAsync(
+            request.ConflictId,
+            request.UserId,
+            ConflictResolutionKind.ClosedWithoutSqlChange,
+            cancellationToken);
 
-        await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(row.ScriptId, row.ConflictingScriptId, cancellationToken);
+        await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB, cancellationToken);
 
         return new ResolveConflictResponse
         {
             Success = true,
             Message = "Çakışma onaylandı; script durumları güncellendi.",
-            ConflictId = row.Id
+            ConflictId = request.ConflictId
         };
     }
 }

@@ -1,3 +1,5 @@
+using DAL.Enums;
+
 namespace ScriptManager.Models.Conflict;
 
 public class SaveConflictReviewRequest
@@ -7,6 +9,9 @@ public class SaveConflictReviewRequest
 
     /// <summary>True ise çakışma kaydı kapatılır (SQL hâlâ çakışıyorsa bile inceleme onayı).</summary>
     public bool MarkResolved { get; set; }
+
+    /// <summary><see cref="ConflictResolutionKind"/> int değeri; SQL güncellenmediyse anlamlıdır.</summary>
+    public int? ResolutionKind { get; set; }
 }
 
 public class ScriptSqlUpdateItem

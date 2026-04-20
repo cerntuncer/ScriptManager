@@ -17,7 +17,9 @@ namespace DAL.Configurations
             builder.ToTable("Conflicts");
             BaseMap.ConfigureBase(builder);
             builder.Property(x => x.TableName).IsRequired()
-                .HasMaxLength(200);
+                .HasColumnType("nvarchar(max)");
+            builder.Property(x => x.Severity).HasConversion<int>().IsRequired();
+            builder.Property(x => x.ResolutionKind).HasConversion<int>();
             builder.Property(x => x.DetectedAt).IsRequired();
 
             builder.HasOne(x => x.Script)

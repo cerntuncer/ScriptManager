@@ -20,7 +20,9 @@ namespace DAL.Repositories.Concretes
         public async Task<List<Conflict>> GetByScriptIdAsync(long scriptId)
         {
             return await _context.Conflicts
-                .Where(x => x.ScriptId == scriptId || x.ConflictingScriptId == scriptId)
+                .Where(x =>
+                    (x.ScriptId == scriptId || x.ConflictingScriptId == scriptId) &&
+                    x.ResolvedAt == null)
                 .Include(x => x.Script)
                 .Include(x => x.ConflictingScript)
                 .ToListAsync();
@@ -29,7 +31,7 @@ namespace DAL.Repositories.Concretes
         public async Task<List<Conflict>> GetUnresolvedConflictsAsync()
         {
             return await _context.Conflicts
-                .Where(x => x.ResolvedAt == null)
+                .Where(x => x.ResolvedAt == null && !x.IsDeleted)
                 .Include(x => x.Script)
                 .Include(x => x.ConflictingScript)
                 .ToListAsync();

@@ -57,10 +57,11 @@ public static class AuthHelper
         return false;
     }
 
-    /// <summary>Taslak script içeriğini düzenleme: script sahibi geliştirici.</summary>
+    /// <summary>Taslak, incelemede veya eski Çakışma kaydındaki script içeriğini düzenleme: sahip geliştirici.</summary>
     public static bool CanEditDraftScriptContent(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
     {
-        if (status != ScriptStatus.Draft) return false;
+        if (status != ScriptStatus.Draft && status != ScriptStatus.PendingTesterReview && status != ScriptStatus.Conflict)
+            return false;
         if (IsDeveloper(user))
         {
             var id = GetUserId(user);
@@ -70,6 +71,19 @@ public static class AuthHelper
         return false;
     }
 
+    /// <summary>Taslak scripti testçi incelemesine gönderme (yalnızca sahip geliştirici).</summary>
+    public static bool CanSendDraftToTester(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
+    {
+        if (status != ScriptStatus.Draft) return false;
+        if (!IsDeveloper(user)) return false;
+        var id = GetUserId(user);
+        return id.HasValue && id.Value == scriptDeveloperId;
+    }
+
+    /// <summary>Testçi incelemesindeki scripti Hazır yapma.</summary>
+    public static bool CanApprovePendingTesterReview(ClaimsPrincipal user, ScriptStatus status) =>
+        IsTester(user) && status == ScriptStatus.PendingTesterReview;
+
     public static bool CanDeleteScript(ClaimsPrincipal user, long scriptDeveloperId)
     {
         if (!IsDeveloper(user)) return false;
@@ -78,6 +92,4 @@ public static class AuthHelper
     }
 
     public static bool CanDeleteRelease(ClaimsPrincipal user) => IsDeveloper(user);
-
-    public static bool CanManageUsers(ClaimsPrincipal user) => IsDeveloper(user);
 }

@@ -1,3 +1,4 @@
+using BLL.Services;
 using DAL.Repositories.Interfaces;
 using MediatR;
 
@@ -29,7 +30,7 @@ public class GetUnresolvedConflictsHandle : IRequestHandler<GetUnresolvedConflic
                 ConflictingScriptName = bName,
                 DetectedAt = c.DetectedAt,
                 WarningMessage =
-                    $"Aynı kayıt ({c.TableName}) üzerinde \"{aName}\" (Id:{c.ScriptId}) ve \"{bName}\" (Id:{c.ConflictingScriptId}) scriptleri etki ediyor olabilir; lütfen kontrol edin."
+                    $"Çakışma konusu: {ConflictKey.ToDisplayLabel(c.TableName)} — \"{aName}\" ve \"{bName}\"; lütfen kontrol edin."
             };
         }).ToList();
 

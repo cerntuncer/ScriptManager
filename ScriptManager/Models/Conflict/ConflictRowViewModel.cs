@@ -1,4 +1,5 @@
 using BLL.Services;
+using DAL.Enums;
 
 namespace ScriptManager.Models.Conflict;
 
@@ -6,13 +7,29 @@ public class ConflictRowViewModel
 {
     public long ConflictId { get; set; }
     public string TableName { get; set; } = string.Empty;
+    public ConflictSeverity Severity { get; set; }
 
     /// <summary>Kullanıcıya gösterilecek okunabilir conflict etiketi.</summary>
-    public string ConflictLabel => ConflictKey.ToDisplayLabel(TableName);
+    public string ConflictLabel => string.IsNullOrWhiteSpace(TableName)
+        ? "Çözümlenen çift"
+        : ConflictKey.ToDisplayLabel(TableName);
+
+    public bool IsReviewAdvised => Severity == ConflictSeverity.ReviewAdvised;
 
     public DateTime DetectedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
     public string? ResolvedByName { get; set; }
+
+    public ConflictResolutionKind? ResolutionKind { get; set; }
+
+    public string ResolvedKindDisplay => FormatResolvedKindDisplay(ResolutionKind);
+
+    public static string FormatResolvedKindDisplay(ConflictResolutionKind? kind) => kind switch
+    {
+        ConflictResolutionKind.FixedWithSqlChange => "Kapatıldı (SQL güncellendi)",
+        ConflictResolutionKind.ClosedWithoutSqlChange => "Kapatıldı (SQL’e dokunulmadı)",
+        _ => "Kapatıldı"
+    };
 
     public string ResolvedAtDisplay => ResolvedAt.HasValue
         ? ResolvedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")

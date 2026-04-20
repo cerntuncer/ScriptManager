@@ -1,13 +1,24 @@
 @model ScriptManager.Models.Conflict.ConflictsIndexViewModel
+@using System.Text.Json
 @{
     var canResolve = ViewBag.CanResolveConflicts as bool? == true;
     var canViewPair = ViewBag.CanViewConflictPair as bool? == true;
+    const string idPh = "999999999";
+    var pairTpl = Url.Action("Pair", "Conflicts", new { id = 999999999L });
+    var scriptDetailTpl = Url.Action("Detail", "Scripts", new { id = 999999999L });
 }
 
+<div class="conflicts-page">
 <div class="page-head">
     <div>
         <h1 class="page-title">Çakışmalar</h1>
-        <p class="page-sub text-muted mb-0 small">Aynı tabloya müdahale eden script çiftleri. <strong>İncele</strong> ile her iki scriptin SQL ve rollback metnini düzenleyebilir; <strong>Kaydet ve çakışmayı kapat</strong> ile inceleme onayını verirsiniz. Sadece kendi scriptinizi düzenleyebilirsiniz; yönetici her iki tarafı da düzenler.</p>
+        <p class="page-sub text-muted mb-0 small">
+            Çakışan scriptler <strong>Çakışma</strong> durumuna alınır; Hazır ve testçi adımları kapalı kalır.
+            Aynı iki script arasındaki tüm çakışma nedenleri tek satırda toplanır; <strong>Konu</strong> sütununda listelenir.
+            Her satırda yalnızca <strong>Görüntüle</strong> vardır: açılan pencerede iki scriptin SQL’ini inceleyebilir,
+            geliştirici olarak düzenleyebilir; işi <strong>Kaydet ve çakışma kaydını kapat</strong> veya scripte dokunmadan
+            <strong>Düzeltme yapmadan kapat</strong> ile bitirebilirsiniz. Kayıt kapanınca durumlar çakışma öncesi haline döner.
+        </p>
     </div>
 </div>
 
@@ -25,7 +36,7 @@
             <table class="modern-table">
                 <thead>
                 <tr>
-                    <th>Tablo</th>
+                    <th>Konu</th>
                     <th>Script 1</th>
                     <th>Script 2</th>
                     <th>Tespit</th>
@@ -36,8 +47,8 @@
                 @foreach (var r in Model.Rows)
                 {
                     <tr data-conflict-id="@r.ConflictId" data-filter-hidden="0">
-                        <td>
-                            <span class="badge text-bg-warning text-dark">@r.ConflictLabel</span>
+                        <td class="conflict-topic-cell">
+                            <span class="conflict-topic-pill" title="@r.ConflictLabel">@r.ConflictLabel</span>
                         </td>
                         <td>
                             <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })">@r.ScriptName</a>
@@ -51,15 +62,11 @@
                         <td class="text-nowrap">
                             @if (canViewPair)
                             {
-                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openConflictReviewModal(@r.ConflictId)">İncele</button>
-                                @if (canResolve)
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="resolveConflict(@r.ConflictId)">Çözümlendi</button>
-                                }
+                                <button type="button" class="btn btn-sm btn-primary" onclick="openConflictReviewModal(@r.ConflictId)">Görüntüle</button>
                             }
                             else
                             {
-                                <span class="text-muted small">Salt okunur</span>
+                                <span class="text-muted small">—</span>
                             }
                         </td>
                     </tr>
@@ -70,83 +77,59 @@
     }
 </div>
 
-@if (Model.ResolvedRows.Count > 0)
-{
-    <div class="panel-card mt-4">
-        <div class="panel-header d-flex justify-content-between align-items-center">
-            <h3 class="mb-0">Son çözümlenen çakışmalar (@Model.ResolvedRows.Count)</h3>
-        </div>
-        <div class="table-wrap custom-scroll">
-            <table class="modern-table">
-                <thead>
-                <tr>
-                    <th>Çakışma</th>
-                    <th>Script 1</th>
-                    <th>Script 2</th>
-                    <th>Çözen</th>
-                    <th>Çözüm tarihi</th>
-                </tr>
-                </thead>
-                <tbody>
-                @foreach (var r in Model.ResolvedRows)
-                {
-                    <tr>
-                        <td><span class="badge text-bg-success">@r.ConflictLabel</span></td>
-                        <td>
-                            <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })" class="small">@r.ScriptName</a>
-                            <div class="small text-muted">@r.ScriptDeveloper</div>
-                        </td>
-                        <td>
-                            <a href="@Url.Action("Detail", "Scripts", new { id = r.OtherScriptId })" class="small">@r.OtherScriptName</a>
-                            <div class="small text-muted">@r.OtherDeveloper</div>
-                        </td>
-                        <td class="small">@(r.ResolvedByName ?? "—")</td>
-                        <td class="small text-muted">@r.ResolvedAtDisplay</td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </div>
-    </div>
+@{
+    var resolvedCount = Model.ResolvedRows.Count;
 }
+<div class="panel-card mt-4" id="conflictResolvedPanel">
+    <div class="panel-header d-flex justify-content-between align-items-center">
+        <h3 class="mb-0">Son çözümlenenler (<span id="conflictResolvedCount">@resolvedCount</span>)</h3>
+    </div>
+    <p id="conflictResolvedEmptyHint" class="text-muted mb-0 p-3@(resolvedCount > 0 ? " d-none" : "")">Henüz çözümlenen kayıt yok.</p>
+    <div id="conflictResolvedTableWrap" class="table-wrap custom-scroll@(resolvedCount == 0 ? " d-none" : "")">
+        <table class="modern-table">
+            <thead>
+            <tr>
+                <th>Sonuç</th>
+                <th>Script 1</th>
+                <th>Script 2</th>
+                <th>Çözen</th>
+                <th>Çözüm tarihi</th>
+            </tr>
+            </thead>
+            <tbody id="conflictResolvedTableBody">
+            @foreach (var r in Model.ResolvedRows)
+            {
+                <tr>
+                    <td><span class="small">@r.ResolvedKindDisplay</span></td>
+                    <td>
+                        <a href="@Url.Action("Detail", "Scripts", new { id = r.ScriptId })" class="small">@r.ScriptName</a>
+                        <div class="small text-muted">@r.ScriptDeveloper</div>
+                    </td>
+                    <td>
+                        <a href="@Url.Action("Detail", "Scripts", new { id = r.OtherScriptId })" class="small">@r.OtherScriptName</a>
+                        <div class="small text-muted">@r.OtherDeveloper</div>
+                    </td>
+                    <td class="small">@(r.ResolvedByName ?? "—")</td>
+                    <td class="small text-muted">@r.ResolvedAtDisplay</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
 
 @section Scripts {
     <script>
-        window.__conflictsUrls = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
-            pair = Url.Action("Pair", "Conflicts") + "?id=",
-            saveReview = Url.Action("SaveReview", "Conflicts")
+        window.__conflictsUrls = @Html.Raw(JsonSerializer.Serialize(new {
+            pairTemplate = pairTpl,
+            scriptDetailTemplate = scriptDetailTpl,
+            pairPlaceholder = idPh,
+            saveReview = Url.Action("SaveReview", "Conflicts"),
+            resolve = Url.Action("Resolve", "Conflicts")
         }));
-    </script>
-    <script>
-        setupPagination("conflictTableBody", 10);
+        window.__conflictsCanResolve = @(canResolve ? "true" : "false");
 
-        async function resolveConflict(conflictId) {
-            const res = await fetch("@Url.Action("Resolve", "Conflicts")", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify({ conflictId })
-            });
-            let data = null;
-            try { data = await res.json(); } catch (_) {}
-            if (!res.ok || !data || data.success === false) {
-                showToast(data?.message || "İşlem başarısız.", "error");
-                return;
-            }
-            showToast(data?.message || "Tamam.", "success");
-            const tr = document.querySelector(`tr[data-conflict-id="${conflictId}"]`);
-            if (tr) {
-                tr.remove();
-                window.__pgState?.["conflictTableBody"]?.refresh();
-                // başlıktaki sayacı güncelle
-                const h3 = document.querySelector(".panel-header h3");
-                if (h3) {
-                    const remaining = document.querySelectorAll("#conflictTableBody tr").length;
-                    h3.textContent = `Açık çakışmalar (${remaining})`;
-                }
-            } else {
-                window.location.reload();
-            }
-            if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
-        }
+        setupPagination("conflictTableBody", 10);
     </script>
 }
