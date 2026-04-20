@@ -14,6 +14,6 @@ public interface IScriptConflictSyncService
 
     Task NormalizeDuplicateOpenConflictsAsync(CancellationToken cancellationToken = default);
 
-    Task RemoveOpenConflictWithDismissalAsync(long conflictId, long resolvedByUserId, ConflictResolutionKind kind,
+    Task RemoveOpenConflictWithDismissalAsync(long conflictId, long resolvedByUserId, ConflictCloseReason closeReason,
         CancellationToken cancellationToken = default);
 }

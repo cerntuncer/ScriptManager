@@ -12,11 +12,11 @@ namespace DAL.Entities
         public DateTime DetectedAt { get; set; }//conflict tespit zamanı
         public long? ResolvedBy { get; set; }
         public DateTime? ResolvedAt { get; set; }
-        public ConflictResolutionKind? ResolutionKind { get; set; }
+        public ConflictCloseReason? CloseReason { get; set; }
 
-        public string? SqlFingerprintMin { get; set; }
+        public string? ResolvedSqlHashScript { get; set; }
 
-        public string? SqlFingerprintMax { get; set; }
+        public string? ResolvedSqlHashConflictingScript { get; set; }
 
         public Script Script { get; set; } = null!;
         public Script ConflictingScript { get; set; } = null!;

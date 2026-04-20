@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using BLL.Services;
 using DAL.Context;
 using DAL.Enums;
@@ -83,16 +84,17 @@ public class ConflictsController : Controller
     {
         public long ConflictId { get; set; }
 
-        public int? ResolutionKind { get; set; }
+        [JsonPropertyName("resolutionKind")]
+        public int? CloseReason { get; set; }
     }
 
-    private static ConflictResolutionKind NormalizeCloseKind(int? v) =>
-        v == (int)ConflictResolutionKind.FixedWithSqlChange
-            ? ConflictResolutionKind.FixedWithSqlChange
-            : ConflictResolutionKind.ClosedWithoutSqlChange;
+    private static ConflictCloseReason NormalizeCloseKind(int? v) =>
+        v == (int)ConflictCloseReason.SqlUpdated
+            ? ConflictCloseReason.SqlUpdated
+            : ConflictCloseReason.NoSqlChange;
 
     private async Task<object?> BuildRecentResolvedPayloadAsync(long scriptId, long otherScriptId,
-        ConflictResolutionKind kind, long resolvedByUserId)
+        ConflictCloseReason reason, long resolvedByUserId)
     {
         var s1 = await _db.Scripts.AsNoTracking()
             .Include(s => s.Developer)
@@ -107,7 +109,7 @@ public class ConflictsController : Controller
         var at = DateTime.UtcNow;
         return new
         {
-            kindDisplay = ConflictRowViewModel.FormatResolvedKindDisplay(kind),
+            kindDisplay = ConflictRowViewModel.FormatCloseReasonDisplay(reason),
             scriptId = s1.Id,
             scriptName = s1.Name,
             scriptDeveloper = s1.Developer?.Name ?? "—",
@@ -139,11 +141,11 @@ public class ConflictsController : Controller
         var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
         var sidA = row.ScriptId;
         var sidB = row.ConflictingScriptId;
-        var closeKind = NormalizeCloseKind(body.ResolutionKind);
-        await _conflictSync.RemoveOpenConflictWithDismissalAsync(row.Id, uid, closeKind);
+        var closeReason = NormalizeCloseKind(body.CloseReason);
+        await _conflictSync.RemoveOpenConflictWithDismissalAsync(row.Id, uid, closeReason);
         await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
 
-        var recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeKind, uid);
+        var recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeReason, uid);
 
         return Json(new
         {
@@ -232,14 +234,14 @@ public class ConflictsController : Controller
             object? recentResolved = null;
             if (body.MarkResolved)
             {
-                ConflictResolutionKind closeKind;
+                ConflictCloseReason closeReason;
                 if (touched.Count > 0)
-                    closeKind = ConflictResolutionKind.FixedWithSqlChange;
-                else if (body.ResolutionKind.HasValue &&
-                         Enum.IsDefined(typeof(ConflictResolutionKind), body.ResolutionKind.Value))
-                    closeKind = (ConflictResolutionKind)body.ResolutionKind.Value;
+                    closeReason = ConflictCloseReason.SqlUpdated;
+                else if (body.CloseReason.HasValue &&
+                         Enum.IsDefined(typeof(ConflictCloseReason), body.CloseReason.Value))
+                    closeReason = (ConflictCloseReason)body.CloseReason.Value;
                 else
-                    closeKind = ConflictResolutionKind.ClosedWithoutSqlChange;
+                    closeReason = ConflictCloseReason.NoSqlChange;
 
                 var rowToClose = await _db.Conflicts.FirstOrDefaultAsync(c =>
                     !c.IsDeleted &&
@@ -248,12 +250,12 @@ public class ConflictsController : Controller
                     Math.Max(c.ScriptId, c.ConflictingScriptId) == pairMax);
 
                 if (rowToClose != null)
-                    await _conflictSync.RemoveOpenConflictWithDismissalAsync(rowToClose.Id, uid, closeKind);
+                    await _conflictSync.RemoveOpenConflictWithDismissalAsync(rowToClose.Id, uid, closeReason);
 
                 await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
 
                 if (rowToClose != null)
-                    recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeKind, uid);
+                    recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeReason, uid);
             }
 
             var stillOpen = await _db.Conflicts
@@ -268,7 +270,7 @@ public class ConflictsController : Controller
             {
                 var autoRecent = await BuildRecentResolvedPayloadAsync(
                     conflictSnap.ScriptId, conflictSnap.ConflictingScriptId,
-                    ConflictResolutionKind.FixedWithSqlChange, uid);
+                    ConflictCloseReason.SqlUpdated, uid);
                 await tx.CommitAsync();
                 return Json(new
                 {

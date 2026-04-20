@@ -33,7 +33,7 @@ public class ResolveConflictHandle : IRequestHandler<ResolveConflictRequest, Res
         await _conflictSync.RemoveOpenConflictWithDismissalAsync(
             request.ConflictId,
             request.UserId,
-            ConflictResolutionKind.ClosedWithoutSqlChange,
+            ConflictCloseReason.NoSqlChange,
             cancellationToken);
 
         await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB, cancellationToken);

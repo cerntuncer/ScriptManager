@@ -87,8 +87,9 @@ namespace DAL.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<int?>("ResolutionKind")
-                        .HasColumnType("int");
+                    b.Property<int?>("CloseReason")
+                        .HasColumnType("int")
+                        .HasColumnName("ResolutionKind");
 
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("datetime2");
@@ -96,19 +97,21 @@ namespace DAL.Migrations
                     b.Property<long?>("ResolvedBy")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("ResolvedSqlHashConflictingScript")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("SqlFingerprintMax");
+
+                    b.Property<string>("ResolvedSqlHashScript")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("SqlFingerprintMin");
+
                     b.Property<long>("ScriptId")
                         .HasColumnType("bigint");
 
                     b.Property<int>("Severity")
                         .HasColumnType("int");
-
-                    b.Property<string>("SqlFingerprintMax")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("SqlFingerprintMin")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("TableName")
                         .IsRequired()

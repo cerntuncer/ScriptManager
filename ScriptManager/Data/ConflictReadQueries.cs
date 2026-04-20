@@ -41,7 +41,7 @@ public static class ConflictReadQueries
         DetectedAt      = c.DetectedAt,
         ResolvedAt      = c.ResolvedAt,
         ResolvedByName  = c.ResolvedByUser?.Name,
-        ResolutionKind  = c.ResolutionKind,
+        CloseReason       = c.CloseReason,
         Severity        = c.Severity,
         ScriptId        = c.ScriptId,
         ScriptName      = c.Script?.Name ?? $"#{c.ScriptId}",

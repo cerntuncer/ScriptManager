@@ -1,4 +1,4 @@
-using DAL.Enums;
+using System.Text.Json.Serialization;
 
 namespace ScriptManager.Models.Conflict;
 
@@ -9,7 +9,8 @@ public class SaveConflictReviewRequest
 
     public bool MarkResolved { get; set; }
 
-    public int? ResolutionKind { get; set; }
+    [JsonPropertyName("resolutionKind")]
+    public int? CloseReason { get; set; }
 }
 
 public class ScriptSqlUpdateItem

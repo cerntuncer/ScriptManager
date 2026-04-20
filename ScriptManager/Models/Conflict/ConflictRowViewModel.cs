@@ -19,14 +19,14 @@ public class ConflictRowViewModel
     public DateTime? ResolvedAt { get; set; }
     public string? ResolvedByName { get; set; }
 
-    public ConflictResolutionKind? ResolutionKind { get; set; }
+    public ConflictCloseReason? CloseReason { get; set; }
 
-    public string ResolvedKindDisplay => FormatResolvedKindDisplay(ResolutionKind);
+    public string ResolvedKindDisplay => FormatCloseReasonDisplay(CloseReason);
 
-    public static string FormatResolvedKindDisplay(ConflictResolutionKind? kind) => kind switch
+    public static string FormatCloseReasonDisplay(ConflictCloseReason? reason) => reason switch
     {
-        ConflictResolutionKind.FixedWithSqlChange => "Kapatıldı (SQL güncellendi)",
-        ConflictResolutionKind.ClosedWithoutSqlChange => "Kapatıldı (SQL’e dokunulmadı)",
+        ConflictCloseReason.SqlUpdated => "Kapatıldı (SQL güncellendi)",
+        ConflictCloseReason.NoSqlChange => "Kapatıldı (SQL’e dokunulmadı)",
         _ => "Kapatıldı"
     };
 
