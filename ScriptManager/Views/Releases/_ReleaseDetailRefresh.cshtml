@@ -2,7 +2,6 @@
 @using System.Text.Json
 @using ScriptManager.Models.Script
 @{
-    var isAdmin = ViewBag.IsAdmin as bool? == true;
     var canWrite = ViewBag.CanWrite as bool? == true;
     var currentUserId = ViewBag.CurrentUserId as long?;
     var treeLocked = Model.IsTreeLocked;
@@ -74,7 +73,7 @@
                 <tbody>
                 @foreach (var s in Model.Scripts)
                 {
-                    var mayPick = isAdmin || (currentUserId.HasValue && s.DeveloperId == currentUserId.Value);
+                    var mayPick = canWrite || (currentUserId.HasValue && s.DeveloperId == currentUserId.Value);
                     <tr>
                         <td>
                             @if (mayPick)

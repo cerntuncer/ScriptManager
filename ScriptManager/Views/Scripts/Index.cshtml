@@ -3,9 +3,7 @@
 @using ScriptManager.Security
 @using DAL.Enums
 @{
-    var canAuthor    = ViewBag.CanAuthorScripts as bool? == true;
-    var isAdmin      = ViewBag.IsAdmin as bool? == true;
-    var actorUserId  = ViewBag.ActorUserId as long? ?? 0L;
+    var canAuthor = ViewBag.CanAuthorScripts as bool? == true;
 }
 
 <div class="page-head">
@@ -46,8 +44,7 @@
             <tbody id="scriptTableBody">
                 @foreach (var item in Model.Scripts)
                 {
-                    var canMarkReady = item.StatusEnum == ScriptStatus.Draft
-                                       && (isAdmin || item.DeveloperId == actorUserId);
+                    var canMarkReady = AuthHelper.CanMarkDraftScriptReady(User, item.DeveloperId, item.StatusEnum);
                     var statusBadgeCls = item.StatusEnum switch {
                         ScriptStatus.Ready    => "script-badge script-badge--ready",
                         ScriptStatus.Draft    => "script-badge script-badge--draft",

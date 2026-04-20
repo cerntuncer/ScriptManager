@@ -5,7 +5,6 @@
 @{
     var devs = ViewBag.Developers as IEnumerable<UserOptionViewModel> ?? Array.Empty<UserOptionViewModel>();
     var devJson = JsonSerializer.Serialize(devs.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }));
-    var isAdmin = ViewBag.IsAdmin as bool? == true;
 }
 
 <div class="page-head">

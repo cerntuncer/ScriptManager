@@ -17,7 +17,8 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body data-script-create-url="@Url.Action("Create", "Scripts")"
-      data-current-user-id="@uidStr">
+      data-current-user-id="@uidStr"
+      data-conflicts-count-badge-url="@Url.Action("CountBadge", "Conflicts")">
     <div class="app-shell">
         <aside id="sidebar" class="app-sidebar">
             @await Html.PartialAsync("_Sidebar")

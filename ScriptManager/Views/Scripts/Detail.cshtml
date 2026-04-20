@@ -2,12 +2,9 @@
 @using DAL.Enums
 @{
     var canDelete = ViewBag.CanDelete as bool? == true;
-    var actorRole = ViewBag.ActorRole as UserRole?;
-    var actorUserId = ViewBag.ActorUserId as long? ?? 0L;
-    var canStatus = ViewBag.CanChangeScriptStatus as bool? == true;
-    var owns = Model.DeveloperId == actorUserId;
     var st = Model.StatusEnum;
-    var canDraftActions = canStatus && st == ScriptStatus.Draft && (actorRole == UserRole.Admin || (actorRole == UserRole.Developer && owns));
+    var canMarkDraftReady = ViewBag.CanMarkDraftReady as bool? == true;
+    var canEditDraftScript = ViewBag.CanEditDraftScript as bool? == true;
 }
 
 <div class="page-head">
@@ -33,8 +30,9 @@
     </div>
     <div class="p-3">
         <p class="small text-muted mb-3 mb-md-2">
-            Yeni kayıt <strong>Taslak</strong>tır. Geliştirici veya yönetici scripti doğrudan <strong>Hazır</strong> durumuna alabilir.
-            <strong>Çakışma</strong> durumu aynı sürümde tablo örtüşmesi için sistem tarafından işaretlenir.
+            Yeni kayıt <strong>Taslak</strong>tır. Geliştirici (kendi scripti), <strong>testçi</strong> veya yönetici taslakları <strong>Hazır</strong> yapabilir.
+            Test gerekmiyorsa geliştirici doğrudan hazırlayabilir; QA akışında testçi onaylar.
+            <strong>Çakışma</strong> aynı sürümde tablo örtüşmesinde sistem tarafından işaretlenir; açık çakışma varken Hazır yapılamaz.
         </p>
         @if (st == ScriptStatus.Conflict)
         {
@@ -44,7 +42,7 @@
         {
             <p class="mb-0 small text-success">Bu script <strong>hazır</strong> — paketleme ve sonraki adımlar için uygun.</p>
         }
-        else if (canDraftActions)
+        else if (canMarkDraftReady)
         {
             <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-sm btn-primary" onclick="changeScriptStatus(@Model.ScriptId, @((int)ScriptStatus.Ready))">Hazır olarak işaretle</button>
@@ -75,7 +73,7 @@
     </div>
 }
 
-@if (canDraftActions)
+@if (canEditDraftScript)
 {
     <div class="panel-card mb-4" id="editScriptPanel" style="display:none">
         <div class="panel-header d-flex justify-content-between align-items-center">
@@ -108,7 +106,7 @@
         <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h3 class="mb-0">SQL</h3>
             <div class="d-flex gap-2">
-                @if (canDraftActions)
+                @if (canEditDraftScript)
                 {
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditPanel()">Düzenle</button>
                 }
@@ -188,6 +186,7 @@
                 showToast(data?.message || "Güncellenemedi.", "error"); return;
             }
             showToast("Script güncellendi.", "success");
+            if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
             // Görüntülenen alanları güncelle
             const h1 = document.querySelector(".page-title");
             if (h1) h1.textContent = name;

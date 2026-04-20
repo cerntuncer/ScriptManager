@@ -1,17 +1,20 @@
-﻿@model ScriptManager.ViewComponents.UserMenuViewModel
+@model ScriptManager.ViewComponents.UserMenuViewModel
 
 @{
     var initial = Model.FullName.Length > 0 ? Model.FullName.Substring(0, 1).ToUpper() : "?";
-    var isDev = string.IsNullOrEmpty(Model.Role) || Model.Role == "Giriş kapalı";
 }
 
-<div class="user-menu">
+<div class="user-menu align-items-center gap-2">
     <div class="user-avatar">@initial</div>
-    @if (!isDev)
+    @if (Model.IsAuthenticated)
     {
         <div class="user-meta">
             <div class="user-name">@Model.FullName</div>
-            <div class="user-role">@Model.Role</div>
+            <div class="user-role">@Model.RoleDisplay</div>
         </div>
+        <form asp-controller="Account" asp-action="Logout" method="post" class="mb-0 ms-1">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2">Çıkış</button>
+        </form>
     }
 </div>

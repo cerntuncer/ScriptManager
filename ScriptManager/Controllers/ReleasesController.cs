@@ -29,7 +29,6 @@ namespace ScriptManager.Controllers
         public async Task<IActionResult> Index()
         {
             ViewData["Title"] = "Sürümler";
-            ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
             ViewBag.CanWrite = AuthHelper.CanWriteOperational(User);
             var vm = new ReleasesIndexViewModel
             {
@@ -60,11 +59,7 @@ namespace ScriptManager.Controllers
                 return BadRequest(new { success = false, message = "Klasör adı zorunludur." });
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var createdBy = body.CreatedBy;
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-                createdBy = uid;
-            else if (createdBy <= 0)
-                return BadRequest(new { success = false, message = "Oluşturan kullanıcıyı seçin." });
+            var createdBy = uid;
 
             var name = body.Name.Trim();
             var userExists = await _db.Users.AsNoTracking().AnyAsync(u => u.Id == createdBy);
@@ -101,11 +96,7 @@ namespace ScriptManager.Controllers
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
 
-            var createdBy = body.CreatedBy;
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-                createdBy = uid;
-            else if (createdBy <= 0)
-                return BadRequest(new { success = false, message = "Oluşturan zorunludur." });
+            var createdBy = uid;
 
             var parent = await _db.Batches.FirstOrDefaultAsync(b => b.Id == body.ParentBatchId && !b.IsDeleted);
             if (parent == null)
@@ -165,11 +156,7 @@ namespace ScriptManager.Controllers
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
 
-            var createdBy = body.CreatedBy;
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-                createdBy = uid;
-            else if (createdBy <= 0)
-                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Oluşturan kullanıcıyı seçin." });
+            var createdBy = uid;
 
             if (string.IsNullOrWhiteSpace(body.Name))
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Release adı girin." });
@@ -292,7 +279,6 @@ namespace ScriptManager.Controllers
                 return NotFound();
 
             ViewBag.Developers = await DeveloperReadQueries.ListOptionsAsync(_db);
-            ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
             ViewBag.CanWrite = AuthHelper.CanWriteOperational(User);
             ViewBag.CurrentUserId = await AuthHelper.GetActorUserIdAsync(User, _db);
             ViewData["Title"] = $"{detail.ReleaseName} — {detail.Version}";
@@ -311,7 +297,6 @@ namespace ScriptManager.Controllers
                 return NotFound();
 
             ViewBag.Developers = await DeveloperReadQueries.ListOptionsAsync(_db);
-            ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
             ViewBag.CanWrite = AuthHelper.CanWriteOperational(User);
             ViewBag.CurrentUserId = await AuthHelper.GetActorUserIdAsync(User, _db);
             return PartialView("_ReleaseDetailRefresh", detail);
@@ -322,6 +307,9 @@ namespace ScriptManager.Controllers
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ExportSelectedSql([FromBody] ExportSelectedSqlRequest? body)
         {
+            if (!AuthHelper.CanWriteOperational(User))
+                return Forbid();
+
             if (body == null || body.ReleaseId <= 0)
                 return BadRequest("Geçersiz istek.");
 
@@ -334,15 +322,6 @@ namespace ScriptManager.Controllers
             var requested = (body.ScriptIds ?? []).Where(id => id > 0).Distinct().ToList();
             if (requested.Count == 0)
                 return BadRequest("En az bir script seçin.");
-
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-            {
-                var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-                var allowed = detail.Scripts.Where(s => s.DeveloperId == uid).Select(s => s.ScriptId).ToHashSet();
-                requested = requested.Where(allowed.Contains).ToList();
-                if (requested.Count == 0)
-                    return Forbid();
-            }
 
             var export = ReleaseReadQueries.BuildExportForScriptSubset(detail, requested);
             if (export == null)

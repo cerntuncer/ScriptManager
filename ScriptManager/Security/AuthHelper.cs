@@ -7,59 +7,77 @@ namespace ScriptManager.Security;
 
 public static class AuthHelper
 {
-    /// <summary>Oturum yokken tüm yazma sayfalarının çalışması için kimlik doğrulanmamış kullanıcı tam yetkili sayılır.</summary>
-    private static bool IsAnonymous(ClaimsPrincipal user) =>
-        user?.Identity?.IsAuthenticated != true;
-
     public static long? GetUserId(ClaimsPrincipal user)
     {
         var v = user.FindFirstValue(ClaimTypes.NameIdentifier);
         return long.TryParse(v, out var id) ? id : null;
     }
 
-    /// <summary>İşlemi yapan kullanıcı: id claim veya aktif ilk yönetici (veya kullanıcı).</summary>
+    /// <summary>Oturum açık kullanıcının Id claim değeri.</summary>
     public static async Task<long> GetActorUserIdAsync(ClaimsPrincipal user, MyContext db,
         CancellationToken cancellationToken = default)
     {
         var id = GetUserId(user);
         if (id.HasValue) return id.Value;
 
-        var admin = await db.Users.AsNoTracking()
-            .Where(u => !u.IsDeleted && u.IsActive && u.Role == UserRole.Admin)
-            .OrderBy(u => u.Id)
-            .Select(u => (long?)u.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (admin.HasValue) return admin.Value;
-
-        return await db.Users.AsNoTracking()
-            .Where(u => !u.IsDeleted && u.IsActive)
-            .OrderBy(u => u.Id)
-            .Select(u => u.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        await Task.CompletedTask;
+        throw new InvalidOperationException("Oturum kimliği bulunamadı; yeniden giriş yapın.");
     }
 
-    public static bool IsAdmin(ClaimsPrincipal user) =>
-        IsAnonymous(user) || user.IsInRole(nameof(UserRole.Admin));
-
     public static bool IsDeveloper(ClaimsPrincipal user) =>
-        IsAnonymous(user) || user.IsInRole(nameof(UserRole.Developer));
+        user.Identity?.IsAuthenticated == true && user.IsInRole(nameof(UserRole.Developer));
 
-    /// <summary>Admin veya geliştirici script oluşturma/güncelleme yapabilir.</summary>
-    public static bool CanAuthorScripts(ClaimsPrincipal user) =>
-        IsAdmin(user) || IsDeveloper(user);
+    public static bool IsTester(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true && user.IsInRole(nameof(UserRole.Tester));
 
-    public static bool CanWriteOperational(ClaimsPrincipal user) =>
-        IsAdmin(user) || IsDeveloper(user);
+    /// <summary>Geliştirici script oluşturma/güncelleme yapabilir.</summary>
+    public static bool CanAuthorScripts(ClaimsPrincipal user) => IsDeveloper(user);
+
+    /// <summary>Batch/sürüm yazma, çakışma çözümü vb. (testçi hariç).</summary>
+    public static bool CanWriteOperational(ClaimsPrincipal user) => IsDeveloper(user);
+
+    /// <summary>Çakışmayı kapatma / inceleme kaydı.</summary>
+    public static bool CanResolveConflicts(ClaimsPrincipal user) => IsDeveloper(user);
+
+    /// <summary>Çakışma eşleştirme JSON (okuma); testçi inceleyebilir, kayıt yine geliştirici.</summary>
+    public static bool CanViewConflictPair(ClaimsPrincipal user) =>
+        CanResolveConflicts(user) || IsTester(user);
+
+    /// <summary>Taslak scripti Hazır yapma: ilgili geliştirici veya testçi.</summary>
+    public static bool CanMarkDraftScriptReady(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
+    {
+        if (status != ScriptStatus.Draft) return false;
+        if (IsTester(user)) return true;
+        if (IsDeveloper(user))
+        {
+            var id = GetUserId(user);
+            return id.HasValue && id.Value == scriptDeveloperId;
+        }
+
+        return false;
+    }
+
+    /// <summary>Taslak script içeriğini düzenleme: script sahibi geliştirici.</summary>
+    public static bool CanEditDraftScriptContent(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
+    {
+        if (status != ScriptStatus.Draft) return false;
+        if (IsDeveloper(user))
+        {
+            var id = GetUserId(user);
+            return id.HasValue && id.Value == scriptDeveloperId;
+        }
+
+        return false;
+    }
 
     public static bool CanDeleteScript(ClaimsPrincipal user, long scriptDeveloperId)
     {
-        if (IsAdmin(user)) return true;
         if (!IsDeveloper(user)) return false;
         var uid = GetUserId(user);
         return uid.HasValue && uid.Value == scriptDeveloperId;
     }
 
-    public static bool CanDeleteRelease(ClaimsPrincipal user) => IsAdmin(user);
+    public static bool CanDeleteRelease(ClaimsPrincipal user) => IsDeveloper(user);
 
-    public static bool CanManageUsers(ClaimsPrincipal user) => IsAdmin(user);
+    public static bool CanManageUsers(ClaimsPrincipal user) => IsDeveloper(user);
 }

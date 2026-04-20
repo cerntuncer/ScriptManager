@@ -250,11 +250,7 @@ public class BatchesController : Controller
             return BadRequest(new { success = false, message = "Ad zorunludur." });
 
         var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-        var createdBy = body.CreatedBy;
-        if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-            createdBy = uid;
-        else if (createdBy <= 0)
-            return BadRequest(new { success = false, message = "Oluşturan zorunludur." });
+        var createdBy = uid;
 
         if (body.ParentBatchId > 0)
         {

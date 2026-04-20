@@ -58,8 +58,6 @@ namespace ScriptManager.Controllers
         {
             ViewData["Title"] = "Scriptler";
             ViewBag.CanAuthorScripts = AuthHelper.CanAuthorScripts(User);
-            ViewBag.IsAdmin = AuthHelper.IsAdmin(User);
-            ViewBag.ActorUserId = AuthHelper.GetUserId(User) ?? 0L;
             var scripts = await ScriptReadQueries.ListActiveScriptsAsync(_db);
             return View(new ScriptsIndexViewModel { Scripts = scripts });
         }
@@ -158,13 +156,8 @@ namespace ScriptManager.Controllers
             var model = ScriptReadQueries.ToListItem(script);
             ViewBag.CanDelete = AuthHelper.CanDeleteScript(User, model.DeveloperId);
 
-            var actorId = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var actor = await _db.Users.AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == actorId && !u.IsDeleted);
-            ViewBag.ActorRole = actor?.Role;
-            ViewBag.ActorUserId = actorId;
-            ViewBag.CanChangeScriptStatus = actor != null &&
-                (actor.Role == UserRole.Admin || actor.Role == UserRole.Developer);
+            ViewBag.CanMarkDraftReady = AuthHelper.CanMarkDraftScriptReady(User, script.DeveloperId, script.Status);
+            ViewBag.CanEditDraftScript = AuthHelper.CanEditDraftScriptContent(User, script.DeveloperId, script.Status);
 
             ViewData["Title"] = $"Script — {model.Name}";
             return View(model);
@@ -181,6 +174,21 @@ namespace ScriptManager.Controllers
             if (!Enum.IsDefined(typeof(ScriptStatus), body.NewStatus))
                 return BadRequest(new { success = false, message = "Geçersiz durum." });
 
+            var newStatus = (ScriptStatus)body.NewStatus;
+            if (newStatus != ScriptStatus.Ready)
+                return BadRequest(new { success = false, message = "Bu işlem yalnızca Taslak → Hazır geçişi içindir." });
+
+            var script = await _db.Scripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted && s.Status != ScriptStatus.Deleted);
+            if (script == null)
+                return NotFound(new { success = false, message = "Script bulunamadı." });
+
+            if (script.Status != ScriptStatus.Draft)
+                return BadRequest(new { success = false, message = "Yalnızca Taslak scriptler Hazır yapılabilir." });
+
+            if (!AuthHelper.CanMarkDraftScriptReady(User, script.DeveloperId, script.Status))
+                return StatusCode(403, new { success = false, message = "Bu scripti Hazır yapma yetkiniz yok." });
+
             var actorId = await AuthHelper.GetActorUserIdAsync(User, _db);
             if (actorId <= 0)
                 return BadRequest(new { success = false, message = "Oturum kullanıcısı bulunamadı." });
@@ -194,8 +202,6 @@ namespace ScriptManager.Controllers
 
             if (!result.Success)
                 return BadRequest(new { success = false, message = result.Message });
-
-            var newStatus = (ScriptStatus)body.NewStatus;
 
             return Json(new
             {
@@ -233,11 +239,7 @@ namespace ScriptManager.Controllers
             if (string.IsNullOrWhiteSpace(body.Name) || string.IsNullOrWhiteSpace(body.SqlScript))
                 return BadRequest(new ApiMutationResponse { Success = false, Message = "Ad ve SQL zorunludur." });
 
-            var developerId = body.DeveloperId;
-            if (AuthHelper.IsDeveloper(User) && !AuthHelper.IsAdmin(User))
-                developerId = uid;
-            else if (developerId <= 0)
-                return BadRequest(new ApiMutationResponse { Success = false, Message = "Geliştirici seçin." });
+            var developerId = uid;
 
             var medReq = new CreateScriptRequest
             {

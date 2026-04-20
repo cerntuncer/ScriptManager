@@ -9,6 +9,7 @@ namespace DAL.Enums
     public enum UserRole
     {
         Developer = 1,
-        Admin = 2
+        /// <summary>QA: herhangi bir geliştiricinin taslak scriptini test sonrası Hazır yapabilir.</summary>
+        Tester = 3,
     }
 }

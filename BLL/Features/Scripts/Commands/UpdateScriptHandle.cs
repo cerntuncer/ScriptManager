@@ -1,4 +1,4 @@
-﻿using BLL.Services;
+using BLL.Services;
 using DAL.Context;
 using DAL.Entities;
 using DAL.Enums;
@@ -115,6 +115,13 @@ namespace BLL.Features.Scripts.Commands
                     return new UpdateScriptResponse { Success = false, Message = "Çakışma durumu yalnızca sistem tarafından atanır." };
                 if (newStatus == ScriptStatus.Deleted)
                     return new UpdateScriptResponse { Success = false, Message = "Silme için silme endpoint'ini kullanın." };
+                if (newStatus == ScriptStatus.Ready)
+                {
+                    if (script.Status != ScriptStatus.Draft)
+                        return new UpdateScriptResponse { Success = false, Message = "Yalnızca Taslak scriptler Hazır yapılabilir." };
+                    if (await _conflictSync.HasUnresolvedConflictsAsync(script.Id, cancellationToken))
+                        return new UpdateScriptResponse { Success = false, Message = "Açık çakışması varken Hazır yapılamaz." };
+                }
             }
 
             if (request.Name != null)

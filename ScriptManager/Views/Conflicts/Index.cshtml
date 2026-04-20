@@ -1,6 +1,7 @@
 @model ScriptManager.Models.Conflict.ConflictsIndexViewModel
 @{
     var canResolve = ViewBag.CanResolveConflicts as bool? == true;
+    var canViewPair = ViewBag.CanViewConflictPair as bool? == true;
 }
 
 <div class="page-head">
@@ -48,10 +49,13 @@
                         </td>
                         <td class="small">@r.DetectedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
                         <td class="text-nowrap">
-                            @if (canResolve)
+                            @if (canViewPair)
                             {
                                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="openConflictReviewModal(@r.ConflictId)">İncele</button>
-                                <button type="button" class="btn btn-sm btn-outline-success" onclick="resolveConflict(@r.ConflictId)">Çözümlendi</button>
+                                @if (canResolve)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="resolveConflict(@r.ConflictId)">Çözümlendi</button>
+                                }
                             }
                             else
                             {
@@ -142,6 +146,7 @@
             } else {
                 window.location.reload();
             }
+            if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
         }
     </script>
 }

@@ -136,7 +136,7 @@ public sealed record ConflictKey(ConflictKeyType Type, string ObjectName, string
             "RECORD" => sub != null ? $"Kayıt: {obj} = {sub}" : $"Kayıt: {obj}",
             "DDL"    => $"Tablo: {obj}",
             "OBJ"    => $"Nesne: {obj}",
-            "DML"    => $"DML: {obj}",
+            "DML"    => $"Veri değişikliği: {obj}",
             _        => serialized
         };
     }

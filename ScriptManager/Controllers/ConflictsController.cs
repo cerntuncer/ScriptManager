@@ -23,16 +23,27 @@ public class ConflictsController : Controller
     public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Çakışmalar";
-        ViewBag.CanResolveConflicts = AuthHelper.CanWriteOperational(User);
+        ViewBag.CanResolveConflicts = AuthHelper.CanResolveConflicts(User);
+        ViewBag.CanViewConflictPair = AuthHelper.CanViewConflictPair(User);
         var rows         = await ConflictReadQueries.ListUnresolvedAsync(_db);
         var resolvedRows = await ConflictReadQueries.ListRecentlyResolvedAsync(_db);
         return View(new ConflictsIndexViewModel { Rows = rows, ResolvedRows = resolvedRows });
     }
 
+    /// <summary>Üst çubuktaki çakışma rozetini AJAX ile yenilemek için.</summary>
+    [HttpGet]
+    public async Task<IActionResult> CountBadge()
+    {
+        var count = await _db.Conflicts.AsNoTracking()
+            .CountAsync(c => c.ResolvedAt == null && !c.IsDeleted);
+
+        return PartialView("~/Views/Shared/Components/ConflictCount/Default.cshtml", count);
+    }
+
     [HttpGet]
     public async Task<IActionResult> Pair(long id)
     {
-        if (!AuthHelper.CanWriteOperational(User))
+        if (!AuthHelper.CanViewConflictPair(User))
             return Forbid();
 
         var c = await _db.Conflicts
@@ -46,10 +57,7 @@ public class ConflictsController : Controller
         if (c.Script == null || c.ConflictingScript == null)
             return BadRequest(new { message = "İlişkili script kayıtları eksik." });
 
-        var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-
-        bool CanEditScript(DAL.Entities.Script s) =>
-            AuthHelper.IsAdmin(User) || s.DeveloperId == uid;
+        var canEditScripts = AuthHelper.IsDeveloper(User);
 
         object ScriptDto(DAL.Entities.Script s, bool canEdit) =>
             new
@@ -66,8 +74,8 @@ public class ConflictsController : Controller
         {
             conflictId = c.Id,
             tableName = c.TableName,
-            scriptA = ScriptDto(c.Script, CanEditScript(c.Script)),
-            scriptB = ScriptDto(c.ConflictingScript, CanEditScript(c.ConflictingScript))
+            scriptA = ScriptDto(c.Script, canEditScripts),
+            scriptB = ScriptDto(c.ConflictingScript, canEditScripts)
         });
     }
 
@@ -80,7 +88,7 @@ public class ConflictsController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> Resolve([FromBody] ResolveConflictForm? body)
     {
-        if (!AuthHelper.CanWriteOperational(User))
+        if (!AuthHelper.CanResolveConflicts(User))
             return Forbid();
 
         if (body == null || body.ConflictId <= 0)
@@ -108,7 +116,7 @@ public class ConflictsController : Controller
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> SaveReview([FromBody] SaveConflictReviewRequest? body)
     {
-        if (!AuthHelper.CanWriteOperational(User))
+        if (!AuthHelper.CanResolveConflicts(User))
             return Forbid();
 
         if (body == null || body.ConflictId <= 0)
@@ -155,12 +163,6 @@ public class ConflictsController : Controller
 
                 if (same)
                     continue;
-
-                if (!AuthHelper.IsAdmin(User) && script.DeveloperId != uid)
-                {
-                    await tx.RollbackAsync();
-                    return Forbid();
-                }
 
                 if (string.IsNullOrWhiteSpace(wantedSql))
                 {

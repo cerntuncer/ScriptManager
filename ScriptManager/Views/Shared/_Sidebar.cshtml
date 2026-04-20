@@ -1,7 +1,7 @@
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
     var user = ViewContext.HttpContext.User;
-    var isAdmin = user.IsInRole("Admin");
+    var showUserManagement = user.IsInRole("Developer");
 }
 
 <div class="sidebar-brand">
@@ -33,7 +33,7 @@
        href="@Url.Action("Index", "Conflicts")"
        data-tooltip="Çakışan scriptlerin listesi">Çakışmalar</a>
 
-    @if (isAdmin)
+    @if (showUserManagement)
     {
         <a class="nav-link-item @(currentController == "Users" ? "active" : "")"
            href="@Url.Action("Index", "Users")"

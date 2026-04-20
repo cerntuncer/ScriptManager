@@ -126,8 +126,8 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
 
         if (releaseId.HasValue)
         {
-            q = q.Where(s =>
-                s.Batch != null && !s.Batch.IsDeleted && s.Batch.ReleaseId == releaseId);
+            var batchIdsInRelease = await GetBatchIdsInReleaseScopeAsync(releaseId.Value, cancellationToken);
+            q = q.Where(s => s.BatchId.HasValue && batchIdsInRelease.Contains(s.BatchId.Value));
         }
         else
         {
@@ -137,6 +137,43 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         }
 
         return await q.ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Aynı sürüme ait tüm batch'ler (ve ReleaseId alanı boş kalmış alt klasörler).
+    /// Yalnızca <c>Batch.ReleaseId == releaseId</c> ile filtrelemek, üstte sürüm olsa da
+    /// alt satırda null kalan kayıtları dışarıda bırakabiliyordu.
+    /// </summary>
+    private async Task<HashSet<long>> GetBatchIdsInReleaseScopeAsync(long releaseId, CancellationToken cancellationToken)
+    {
+        var seeds = await _db.Batches.AsNoTracking()
+            .Where(b => !b.IsDeleted && b.ReleaseId == releaseId)
+            .Select(b => b.Id)
+            .ToListAsync(cancellationToken);
+
+        var result = new HashSet<long>(seeds);
+        var frontier = new HashSet<long>(seeds);
+
+        while (frontier.Count > 0)
+        {
+            var children = await _db.Batches.AsNoTracking()
+                .Where(b =>
+                    !b.IsDeleted &&
+                    b.ParentBatchId.HasValue &&
+                    frontier.Contains(b.ParentBatchId.Value) &&
+                    (!b.ReleaseId.HasValue || b.ReleaseId.Value == releaseId))
+                .Select(b => b.Id)
+                .ToListAsync(cancellationToken);
+
+            frontier.Clear();
+            foreach (var id in children)
+            {
+                if (result.Add(id))
+                    frontier.Add(id);
+            }
+        }
+
+        return result;
     }
 
     private async Task<long?> ResolveReleaseIdAsync(long batchId, CancellationToken cancellationToken)

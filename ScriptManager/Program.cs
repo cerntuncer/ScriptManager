@@ -7,6 +7,8 @@ using DAL.Repositories.Interfaces;
 using MediatR;
 using DAL.Entities;
 using DAL.Enums;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,24 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllersWithViews();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "ScriptManager.Auth";
+        options.LoginPath = "/Account/Login";
+        options.LogoutPath = "/Account/Logout";
+        options.AccessDeniedPath = "/Account/AccessDenied";
+        options.SlidingExpiration = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(12);
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 builder.Services.AddDbContext<MyContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -43,61 +63,73 @@ if (app.Environment.IsDevelopment())
         var db = scope.ServiceProvider.GetRequiredService<MyContext>();
         db.Database.Migrate();
 
-        if (!await db.Users.AnyAsync())
+        // Yerel seed: Ceren test hesapları (yalnızca Development). Şifre her açılışta bu üç kullanıcı için 123456 olur.
+        const string seedPassword = "123456";
+        var seedAccounts = new (string Email, string Name, UserRole Role)[]
         {
-            db.Users.AddRange(
-                new User
-                {
-                    Name = "Yerel geliştirici",
-                    Email = "developer@localhost",
-                    Role = UserRole.Developer,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
-                },
-                new User
-                {
-                    Name = "Yerel yönetici",
-                    Email = "admin@localhost",
-                    Role = UserRole.Admin,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
-                });
-            await db.SaveChangesAsync();
-        }
-        else
+            ("ceren1@localhost", "Ceren (testçi)", UserRole.Tester),
+            ("ceren2@localhost", "Ceren (geliştirici 2)", UserRole.Developer),
+            ("ceren3@localhost", "Ceren (geliştirici)", UserRole.Developer),
+        };
+
+        foreach (var (email, name, role) in seedAccounts)
         {
-            var hasAdmin = await db.Users.AnyAsync(u =>
-                !u.IsDeleted && u.Role == UserRole.Admin);
-            var adminEmailUsed = await db.Users.AnyAsync(u => !u.IsDeleted && u.Email == "admin@localhost");
-            if (!hasAdmin && !adminEmailUsed)
+            if (!await db.Users.AnyAsync(u => !u.IsDeleted && u.Email == email))
             {
                 db.Users.Add(new User
                 {
-                    Name = "Yerel yönetici",
-                    Email = "admin@localhost",
-                    Role = UserRole.Admin,
+                    Name = name,
+                    Email = email,
+                    Role = role,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
                     IsDeleted = false
                 });
-                await db.SaveChangesAsync();
             }
         }
 
+        await db.SaveChangesAsync();
+
         var pwdHasher = new PasswordHasher<User>();
-        var allUsers = await db.Users.Where(u => !u.IsDeleted).ToListAsync();
-        foreach (var u in allUsers)
+        foreach (var (email, _, _) in seedAccounts)
         {
+            var u = await db.Users.FirstOrDefaultAsync(x => !x.IsDeleted && x.Email == email);
+            if (u == null) continue;
+
+            var cred = await db.UserCredentials.FirstOrDefaultAsync(c => c.UserId == u.Id && !c.IsDeleted);
+            var hash = pwdHasher.HashPassword(u, seedPassword);
+            if (cred == null)
+            {
+                db.UserCredentials.Add(new UserCredential
+                {
+                    UserId = u.Id,
+                    UserName = u.Email,
+                    PasswordHash = hash,
+                    LockoutEnabled = false,
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false
+                });
+            }
+            else
+            {
+                cred.UserName = u.Email;
+                cred.PasswordHash = hash;
+                cred.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        // Seed dışındaki kullanıcıların credential'ı yoksa varsayılan şifre ata (eski davranışa yakın)
+        var seedEmails = new HashSet<string>(seedAccounts.Select(a => a.Email), StringComparer.OrdinalIgnoreCase);
+        foreach (var u in await db.Users.Where(x => !x.IsDeleted).ToListAsync())
+        {
+            if (seedEmails.Contains(u.Email)) continue;
             var hasCred = await db.UserCredentials.AnyAsync(c => c.UserId == u.Id && !c.IsDeleted);
-            if (hasCred)
-                continue;
+            if (hasCred) continue;
             db.UserCredentials.Add(new UserCredential
             {
                 UserId = u.Id,
                 UserName = u.Email,
-                PasswordHash = pwdHasher.HashPassword(u, "Dev123!"),
+                PasswordHash = pwdHasher.HashPassword(u, seedPassword),
                 LockoutEnabled = false,
                 CreatedAt = DateTime.UtcNow,
                 IsDeleted = false
@@ -122,8 +154,14 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
+// / → Dashboard/Index; anonim kullanıcı FallbackPolicy ile /Account/Login'e gider.
+// Kökü ayrıca Login'e bağlamıyoruz: RedirectToAction(Dashboard) bazen / üretir ve Login ile sonsuz yönlendirme oluşur.
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Dashboard}/{action=Index}/{id?}");
+    pattern: "{controller}/{action=Index}/{id?}",
+    defaults: new { controller = "Dashboard", action = "Index" });
 
 app.Run();

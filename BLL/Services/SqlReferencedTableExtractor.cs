@@ -11,13 +11,17 @@ public static class SqlReferencedTableExtractor
     private static readonly Regex[] DmlPatterns =
     {
         new(@"(?i)\bINSERT\s+INTO\s+(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
-        new(@"(?i)\bUPDATE\s+(?<t>[\w\.\[\]\""`]+)\b", RegexOptions.Compiled),
+        // UPDATE TOP (n) dbo.Table — aksi halde "TOP" tablo sanılıyordu
+        new(@"(?i)\bUPDATE\s+(?:TOP\s*\([^)]*\)\s+)?(?<t>[\w\.\[\]\""`]+)\b", RegexOptions.Compiled),
         new(@"(?i)\bDELETE\s+FROM\s+(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
         new(@"(?i)\bTRUNCATE\s+TABLE\s+(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
         new(@"(?i)\bALTER\s+TABLE\s+(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
-        new(@"(?i)\bMERGE\s+(?<t>[\w\.\[\]\""`]+)\b", RegexOptions.Compiled),
+        // MERGE [INTO] hedef — INTO anahtar kelimesi tablo sayılmasın
+        new(@"(?i)\bMERGE\s+(?:INTO\s+)?(?<t>[\w\.\[\]\""`]+)\b", RegexOptions.Compiled),
         new(@"(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
         new(@"(?i)\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
+        // FOREIGN KEY ... REFERENCES şema.tablo
+        new(@"(?i)\bREFERENCES\s+(?<t>[\w\.\[\]\""`]+)", RegexOptions.Compiled),
     };
 
     // DDL — nesne oluşturma/değiştirme
@@ -31,13 +35,29 @@ public static class SqlReferencedTableExtractor
 
     private static readonly HashSet<string> SqlNoise = new(StringComparer.OrdinalIgnoreCase)
     {
-        "SET", "WITH", "TOP", "JOIN", "FROM", "INTO", "WHERE", "BY", "AS"
+        "SET", "WITH", "TOP", "JOIN", "FROM", "INTO", "WHERE", "BY", "AS",
+        // Açıklama / araç metinlerinde geçen "UPDATE command(s)" vb. yanlış yakalanmasın
+        "COMMAND", "COMMANDS",
+        // İstatistik / yardımcı ifadeler
+        "STATISTICS"
     };
+
+    private static readonly Regex BlockCommentRx = new(@"/\*[\s\S]*?\*/", RegexOptions.Compiled);
+    private static readonly Regex LineCommentRx = new(@"--[^\r\n]*", RegexOptions.Compiled);
+
+    /// <summary>Yorum ve açıklama blokları regex'i yanıltmasın diye kaldırılır.</summary>
+    private static string StripSqlComments(string sql)
+    {
+        var s = BlockCommentRx.Replace(sql, " ");
+        return LineCommentRx.Replace(s, " ");
+    }
 
     public static HashSet<string> ExtractTables(string? sql)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(sql)) return set;
+
+        sql = StripSqlComments(sql);
 
         foreach (var rx in DmlPatterns)
             AddMatches(rx, sql, set);
@@ -84,6 +104,8 @@ public static class SqlReferencedTableExtractor
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(sql)) return set;
+
+        sql = StripSqlComments(sql);
 
         foreach (Match m in RecordEqPattern.Matches(sql))
         {

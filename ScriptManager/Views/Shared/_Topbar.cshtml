@@ -9,7 +9,9 @@
     </div>
 
     <div class="topbar-right">
-        @await Component.InvokeAsync("ConflictCount")
+        <span id="conflictCountMount" class="d-inline-flex align-items-center">
+            @await Component.InvokeAsync("ConflictCount")
+        </span>
         @await Component.InvokeAsync("UserMenu")
     </div>
 </div>

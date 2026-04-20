@@ -5,10 +5,10 @@ using ScriptManager.Models.User;
 
 namespace ScriptManager.Data;
 
-/// <summary>MVC panelinde kullanıcı listesi — EF global filtre: IsDeleted = false.</summary>
+/// <summary>Kullanıcı yönetimi sayfası listesi — EF global filtre: IsDeleted = false.</summary>
 public static class UserReadQueries
 {
-    public static async Task<List<UserListItemViewModel>> ListForAdminPanelAsync(MyContext db)
+    public static async Task<List<UserListItemViewModel>> ListForUserManagementAsync(MyContext db)
     {
         var rows = await db.Users.AsNoTracking()
             .Where(u => !u.IsDeleted)
@@ -32,8 +32,8 @@ public static class UserReadQueries
     private static string FormatRole(UserRole role) =>
         role switch
         {
-            UserRole.Admin => "Yönetici",
             UserRole.Developer => "Geliştirici",
+            UserRole.Tester => "Testçi",
             _ => role.ToString()
         };
 
@@ -41,9 +41,9 @@ public static class UserReadQueries
         role switch
         {
             UserRole.Developer =>
-                "Script oluşturur (Taslak) ve Hazır durumuna alır. Hazır olmayan script release'e eklenemez.",
-            UserRole.Admin =>
-                "Kullanıcılar, sürümler ve tüm yönetim işlemleri. Script durumunu değiştirebilir.",
+                "Script ve sürüm/versiyon/çakışma yönetimi; kullanıcı listesi. Kendi taslak scriptini Hazır yapabilir; ayrıca testçi QA yapar.",
+            UserRole.Tester =>
+                "Taslak scriptleri test edip Hazır işaretler. Sürüme yalnızca tüm scriptler Hazır olunca çıkılır.",
             _ => "—"
         };
 }

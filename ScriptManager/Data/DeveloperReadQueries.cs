@@ -1,4 +1,5 @@
 using DAL.Context;
+using DAL.Enums;
 using Microsoft.EntityFrameworkCore;
 using ScriptManager.Models.Script;
 
@@ -9,6 +10,8 @@ public static class DeveloperReadQueries
     public static async Task<List<UserOptionViewModel>> ListOptionsAsync(MyContext db)
     {
         var rows = await db.Users.AsNoTracking()
+            .Where(u => !u.IsDeleted && u.IsActive &&
+                        u.Role == UserRole.Developer)
             .OrderBy(u => u.Name)
             .Select(u => new { u.Id, u.Name, u.Email, u.IsActive })
             .ToListAsync();

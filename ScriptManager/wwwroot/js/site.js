@@ -2,7 +2,26 @@ document.addEventListener("DOMContentLoaded", () => {
     initSidebarToggle();
     initCollapseMenus();
     initGlobalSearch();
+    void refreshConflictCountBadge();
+    setInterval(() => void refreshConflictCountBadge(), 45_000);
 });
+
+/** Üst bardaki açık çakışma sayacını sunucudan çeker (kayıt sonrası anlık güncelleme için). */
+async function refreshConflictCountBadge() {
+    const mount = document.getElementById("conflictCountMount");
+    if (!mount) return;
+    const badgeUrl = document.body?.dataset?.conflictsCountBadgeUrl || "/Conflicts/CountBadge";
+    try {
+        const res = await fetch(badgeUrl, {
+            headers: { Accept: "text/html", "X-Requested-With": "XMLHttpRequest" }
+        });
+        if (!res.ok) return;
+        const html = await res.text();
+        if (html) mount.innerHTML = html;
+    } catch {
+        /* ignore */
+    }
+}
 
 function initSidebarToggle() {
     const btn = document.getElementById("sidebarToggle");
@@ -117,7 +136,7 @@ function conflictLabel(key) {
         case "RECORD": return sub ? `Kayıt: ${obj} = ${sub}` : `Kayıt: ${obj}`;
         case "DDL":    return `Tablo: ${obj}`;
         case "OBJ":    return `Nesne: ${obj}`;
-        case "DML":    return `DML: ${obj}`;
+        case "DML":    return `Veri değişikliği: ${obj}`;
         default:       return key;
     }
 }
@@ -463,6 +482,7 @@ async function submitConflictReview(markResolved) {
             window.location.reload();
         }
     }
+    void refreshConflictCountBadge();
 }
 
 function scriptWizardRenderDeveloperOptions(devs) {
@@ -1671,6 +1691,7 @@ async function submitCreateScript() {
     window.__pendingScriptBatchId = null;
     const modalEl = document.getElementById("globalAppModal");
     bootstrap.Modal.getInstance(modalEl)?.hide();
+    void refreshConflictCountBadge();
 }
 
 async function openScriptsPageCreateModal() {

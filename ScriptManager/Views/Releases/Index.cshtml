@@ -3,7 +3,6 @@
 
 @{
     var devJson = JsonSerializer.Serialize(Model.Developers.Select(d => new { id = d.UserId, name = d.Name, email = d.Email }));
-    var isAdmin = ViewBag.IsAdmin as bool? == true;
     var canWrite = ViewBag.CanWrite as bool? == true;
 }
 

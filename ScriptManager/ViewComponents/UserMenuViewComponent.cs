@@ -10,14 +10,32 @@ namespace ScriptManager.ViewComponents
             var u = http.HttpContext?.User;
             if (u?.Identity?.IsAuthenticated != true)
             {
-                return View(new UserMenuViewModel { FullName = "Geliştirme", Role = "Giriş kapalı" });
+                return View(new UserMenuViewModel
+                {
+                    FullName = "Misafir",
+                    Role = "",
+                    RoleDisplay = "",
+                    IsAuthenticated = false
+                });
             }
 
             var name = u.FindFirstValue(ClaimTypes.Name)
                        ?? u.Identity?.Name
                        ?? "Kullanıcı";
             var role = u.FindFirstValue(ClaimTypes.Role) ?? "";
-            return View(new UserMenuViewModel { FullName = name, Role = role });
+            var roleDisplay = role switch
+            {
+                "Developer" => "Geliştirici",
+                "Tester" => "Testçi",
+                _ => role
+            };
+            return View(new UserMenuViewModel
+            {
+                FullName = name,
+                Role = role,
+                RoleDisplay = roleDisplay,
+                IsAuthenticated = true
+            });
         }
     }
 
@@ -25,5 +43,7 @@ namespace ScriptManager.ViewComponents
     {
         public string FullName { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
+        public string RoleDisplay { get; set; } = string.Empty;
+        public bool IsAuthenticated { get; set; }
     }
 }

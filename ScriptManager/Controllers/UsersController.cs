@@ -24,7 +24,7 @@ namespace ScriptManager.Controllers
 
             ViewData["Title"] = "Kullanıcılar";
             ViewBag.ActorUserId = await AuthHelper.GetActorUserIdAsync(User, _db);
-            var users = await UserReadQueries.ListForAdminPanelAsync(_db);
+            var users = await UserReadQueries.ListForUserManagementAsync(_db);
             return View(new UsersIndexViewModel { Users = users });
         }
 
