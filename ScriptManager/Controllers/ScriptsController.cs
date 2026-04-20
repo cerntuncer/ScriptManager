@@ -27,7 +27,6 @@ namespace ScriptManager.Controllers
             _conflictSync = conflictSync;
         }
 
-        /// <summary>SQL Server NOEXEC + ScriptDom + heuristik ile T-SQL kontrolü (kaydetmeden).</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public IActionResult ValidateSql([FromBody] SqlSyntaxValidationRequest? body)
@@ -72,7 +71,6 @@ namespace ScriptManager.Controllers
             });
         }
 
-        /// <summary>Topbar global arama — script adı, developer, versiyon üzerinden arar.</summary>
         [HttpGet]
         public async Task<IActionResult> QuickSearch([FromQuery] string? q)
         {
@@ -103,7 +101,6 @@ namespace ScriptManager.Controllers
             return Json(new { results = scripts });
         }
 
-        /// <summary>Release / batch modallarında mevcut script çoklu seçimi.</summary>
         [HttpGet]
         public async Task<IActionResult> ListForPicker()
         {
@@ -128,7 +125,6 @@ namespace ScriptManager.Controllers
             return Json(new { scripts = rows });
         }
 
-        /// <summary>Script oluşturma: havuz batch ağacı ve geliştiriciler.</summary>
         [HttpGet]
         public async Task<IActionResult> CreateWizardContext()
         {
@@ -165,7 +161,6 @@ namespace ScriptManager.Controllers
             return View(model);
         }
 
-        /// <summary>Taslak → testçi incelemesi veya Hazır; testçi incelemesi → Hazır (testçi).</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ChangeStatus([FromBody] ChangeScriptStatusFormRequest? body)
@@ -329,11 +324,6 @@ namespace ScriptManager.Controllers
             return Json(new { success = true, message = "Script güncellendi." });
         }
 
-        /// <summary>
-        /// Conflict tespiti için tanılama: bir script'in ürettiği keyleri,
-        /// bulunan peer'ları ve neden çakışıp çakışmadığını döner.
-        /// Sadece geliştirme/test amacıyla kullanılır.
-        /// </summary>
         [HttpGet]
         public async Task<IActionResult> ConflictDiagnose(long id)
         {

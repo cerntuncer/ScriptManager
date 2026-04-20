@@ -164,7 +164,7 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         ConflictResolutionKind kind, CancellationToken cancellationToken = default)
     {
         var row = await _db.Conflicts.FirstOrDefaultAsync(c => c.Id == conflictId && !c.IsDeleted, cancellationToken);
-        if (row == null) return;
+        if (row == null || row.ResolvedAt != null) return;
 
         var min = Math.Min(row.ScriptId, row.ConflictingScriptId);
         var max = Math.Max(row.ScriptId, row.ConflictingScriptId);
@@ -174,60 +174,88 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         var sMax = await _db.Scripts.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == max && !s.IsDeleted, cancellationToken);
 
-        var existingDismissals = await _db.ConflictPairDismissals
-            .Where(d => d.ScriptIdMin == min && d.ScriptIdMax == max)
-            .ToListAsync(cancellationToken);
-        foreach (var d in existingDismissals)
-            _db.ConflictPairDismissals.Remove(d);
+        var now = DateTime.UtcNow;
 
-        if (sMin != null && sMax != null)
+        var priorSuppression = await _db.Conflicts
+            .Where(c =>
+                !c.IsDeleted &&
+                c.ResolvedAt != null &&
+                c.Id != row.Id &&
+                c.ScriptId == min &&
+                c.ConflictingScriptId == max &&
+                c.SqlFingerprintMin != null &&
+                c.SqlFingerprintMax != null)
+            .ToListAsync(cancellationToken);
+        foreach (var p in priorSuppression)
         {
-            await _db.ConflictPairDismissals.AddAsync(new ConflictPairDismissal
-            {
-                ScriptIdMin = min,
-                ScriptIdMax = max,
-                SqlFingerprintMin = ScriptSqlFingerprint.Compute(sMin),
-                SqlFingerprintMax = ScriptSqlFingerprint.Compute(sMax),
-                ResolvedByUserId = resolvedByUserId,
-                ResolutionKind = kind,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
-            }, cancellationToken);
+            p.SqlFingerprintMin = null;
+            p.SqlFingerprintMax = null;
+            p.UpdatedAt = now;
+            _db.Conflicts.Update(p);
         }
 
-        _db.Conflicts.Remove(row);
+        row.ScriptId = min;
+        row.ConflictingScriptId = max;
+        row.ResolvedBy = resolvedByUserId;
+        row.ResolvedAt = now;
+        row.ResolutionKind = kind;
+        row.UpdatedAt = now;
+        if (sMin != null && sMax != null)
+        {
+            row.SqlFingerprintMin = ScriptSqlFingerprint.Compute(sMin);
+            row.SqlFingerprintMax = ScriptSqlFingerprint.Compute(sMax);
+        }
+        else
+        {
+            row.SqlFingerprintMin = null;
+            row.SqlFingerprintMax = null;
+        }
+
+        _db.Conflicts.Update(row);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task InvalidateDismissalsIfSqlChangedAsync(long scriptId, CancellationToken cancellationToken)
     {
-        var list = await _db.ConflictPairDismissals
-            .Where(x => x.ScriptIdMin == scriptId || x.ScriptIdMax == scriptId)
+        var list = await _db.Conflicts
+            .Where(c =>
+                !c.IsDeleted &&
+                c.ResolvedAt != null &&
+                c.SqlFingerprintMin != null &&
+                c.SqlFingerprintMax != null &&
+                (c.ScriptId == scriptId || c.ConflictingScriptId == scriptId))
             .ToListAsync(cancellationToken);
 
-        foreach (var d in list)
+        foreach (var c in list)
         {
             var smin = await _db.Scripts.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == d.ScriptIdMin && !s.IsDeleted, cancellationToken);
+                .FirstOrDefaultAsync(s => s.Id == c.ScriptId && !s.IsDeleted, cancellationToken);
             var smax = await _db.Scripts.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == d.ScriptIdMax && !s.IsDeleted, cancellationToken);
-            if (smin == null || smax == null)
+                .FirstOrDefaultAsync(s => s.Id == c.ConflictingScriptId && !s.IsDeleted, cancellationToken);
+            if (smin == null || smax == null ||
+                ScriptSqlFingerprint.Compute(smin) != c.SqlFingerprintMin ||
+                ScriptSqlFingerprint.Compute(smax) != c.SqlFingerprintMax)
             {
-                _db.ConflictPairDismissals.Remove(d);
-                continue;
+                c.SqlFingerprintMin = null;
+                c.SqlFingerprintMax = null;
+                c.UpdatedAt = DateTime.UtcNow;
+                _db.Conflicts.Update(c);
             }
-
-            if (ScriptSqlFingerprint.Compute(smin) != d.SqlFingerprintMin ||
-                ScriptSqlFingerprint.Compute(smax) != d.SqlFingerprintMax)
-                _db.ConflictPairDismissals.Remove(d);
         }
     }
 
     private async Task<bool> PairIsActivelyDismissedAsync(long minId, long maxId, CancellationToken cancellationToken)
     {
-        var d = await _db.ConflictPairDismissals.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ScriptIdMin == minId && x.ScriptIdMax == maxId, cancellationToken);
-        if (d == null) return false;
+        var c = await _db.Conflicts.AsNoTracking()
+            .FirstOrDefaultAsync(x =>
+                    !x.IsDeleted &&
+                    x.ResolvedAt != null &&
+                    x.SqlFingerprintMin != null &&
+                    x.SqlFingerprintMax != null &&
+                    x.ScriptId == minId &&
+                    x.ConflictingScriptId == maxId,
+                cancellationToken);
+        if (c == null) return false;
 
         var smin = await _db.Scripts.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == minId && !s.IsDeleted, cancellationToken);
@@ -235,8 +263,8 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
             .FirstOrDefaultAsync(s => s.Id == maxId && !s.IsDeleted, cancellationToken);
         if (smin == null || smax == null) return false;
 
-        return ScriptSqlFingerprint.Compute(smin) == d.SqlFingerprintMin &&
-               ScriptSqlFingerprint.Compute(smax) == d.SqlFingerprintMax;
+        return ScriptSqlFingerprint.Compute(smin) == c.SqlFingerprintMin &&
+               ScriptSqlFingerprint.Compute(smax) == c.SqlFingerprintMax;
     }
 
     private async Task<List<Script>> GetPeerScriptsAsync(Script script, CancellationToken cancellationToken)
@@ -269,11 +297,6 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
         return await q.ToListAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Aynı sürüme ait tüm batch'ler (ve ReleaseId alanı boş kalmış alt klasörler).
-    /// Yalnızca <c>Batch.ReleaseId == releaseId</c> ile filtrelemek, üstte sürüm olsa da
-    /// alt satırda null kalan kayıtları dışarıda bırakabiliyordu.
-    /// </summary>
     private async Task<HashSet<long>> GetBatchIdsInReleaseScopeAsync(long releaseId, CancellationToken cancellationToken)
     {
         var seeds = await _db.Batches.AsNoTracking()

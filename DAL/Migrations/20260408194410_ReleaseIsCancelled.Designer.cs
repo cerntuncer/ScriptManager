@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260408194410_ReleaseIsCancelled")]
     partial class ReleaseIsCancelled
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

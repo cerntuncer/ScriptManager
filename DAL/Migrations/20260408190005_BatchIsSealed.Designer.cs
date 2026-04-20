@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260408190005_BatchIsSealed")]
     partial class BatchIsSealed
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

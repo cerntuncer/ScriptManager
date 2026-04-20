@@ -9,7 +9,6 @@ public class ConflictRowViewModel
     public string TableName { get; set; } = string.Empty;
     public ConflictSeverity Severity { get; set; }
 
-    /// <summary>Kullanıcıya gösterilecek okunabilir conflict etiketi.</summary>
     public string ConflictLabel => string.IsNullOrWhiteSpace(TableName)
         ? "Çözümlenen çift"
         : ConflictKey.ToDisplayLabel(TableName);

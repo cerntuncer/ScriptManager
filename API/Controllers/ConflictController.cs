@@ -23,7 +23,6 @@ public class ConflictController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Çakışma yok onayı: kaydı çözümler ve ilgili script durumlarını günceller.</summary>
     [HttpPost("resolve")]
     public async Task<IActionResult> Resolve([FromBody] ResolveConflictRequest request, CancellationToken cancellationToken)
     {

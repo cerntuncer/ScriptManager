@@ -5,7 +5,6 @@ using ScriptManager.Models.User;
 
 namespace ScriptManager.Data;
 
-/// <summary>Kullanıcı yönetimi sayfası listesi — EF global filtre: IsDeleted = false.</summary>
 public static class UserReadQueries
 {
     public static async Task<List<UserListItemViewModel>> ListForUserManagementAsync(MyContext db)

@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260402130526_RollbackScriptNvarcharMax_AndCleanup")]
     partial class RollbackScriptNvarcharMax_AndCleanup
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260409100000_RenameBatchIsSealedToIsLocked")]
     partial class RenameBatchIsSealedToIsLocked
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

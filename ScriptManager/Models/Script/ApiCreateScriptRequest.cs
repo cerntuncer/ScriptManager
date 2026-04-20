@@ -1,6 +1,5 @@
 namespace ScriptManager.Models.Script
 {
-    /// <summary>API <c>POST api/Script</c> ile aynı JSON şekli (BLL CreateScriptRequest).</summary>
     public class ApiCreateScriptRequest
     {
         public string Name { get; set; } = string.Empty;

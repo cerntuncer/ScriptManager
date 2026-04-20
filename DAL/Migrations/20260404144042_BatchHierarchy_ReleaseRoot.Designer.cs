@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260404144042_BatchHierarchy_ReleaseRoot")]
     partial class BatchHierarchy_ReleaseRoot
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

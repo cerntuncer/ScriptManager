@@ -11,7 +11,6 @@ namespace DAL.Entities
         public long CreatedBy { get; set; }
         public bool IsActive { get; set; }
 
-        /// <summary>İptal edildi; paketler havuza döner, sürüm kaydı silinmez.</summary>
         public bool IsCancelled { get; set; }
 
         public long? RootBatchId { get; set; }

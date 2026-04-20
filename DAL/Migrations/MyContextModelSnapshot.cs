@@ -102,6 +102,14 @@ namespace DAL.Migrations
                     b.Property<int>("Severity")
                         .HasColumnType("int");
 
+                    b.Property<string>("SqlFingerprintMax")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("SqlFingerprintMin")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("TableName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -118,56 +126,6 @@ namespace DAL.Migrations
                     b.HasIndex("ScriptId");
 
                     b.ToTable("Conflicts", (string)null);
-                });
-
-            modelBuilder.Entity("DAL.Entities.ConflictPairDismissal", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("ResolutionKind")
-                        .HasColumnType("int");
-
-                    b.Property<long?>("ResolvedByUserId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("ScriptIdMax")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("ScriptIdMin")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("SqlFingerprintMax")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("SqlFingerprintMin")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ResolvedByUserId");
-
-                    b.HasIndex("ScriptIdMax");
-
-                    b.HasIndex("ScriptIdMin", "ScriptIdMax");
-
-                    b.ToTable("ConflictPairDismissals", (string)null);
                 });
 
             modelBuilder.Entity("DAL.Entities.Release", b =>
@@ -430,32 +388,6 @@ namespace DAL.Migrations
                     b.Navigation("ResolvedByUser");
 
                     b.Navigation("Script");
-                });
-
-            modelBuilder.Entity("DAL.Entities.ConflictPairDismissal", b =>
-                {
-                    b.HasOne("DAL.Entities.User", "ResolvedByUser")
-                        .WithMany()
-                        .HasForeignKey("ResolvedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("DAL.Entities.Script", "ScriptMax")
-                        .WithMany()
-                        .HasForeignKey("ScriptIdMax")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Entities.Script", "ScriptMin")
-                        .WithMany()
-                        .HasForeignKey("ScriptIdMin")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ResolvedByUser");
-
-                    b.Navigation("ScriptMax");
-
-                    b.Navigation("ScriptMin");
                 });
 
             modelBuilder.Entity("DAL.Entities.Release", b =>

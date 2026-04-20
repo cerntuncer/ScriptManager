@@ -7,10 +7,8 @@ public class SaveConflictReviewRequest
     public long ConflictId { get; set; }
     public List<ScriptSqlUpdateItem>? Updates { get; set; }
 
-    /// <summary>True ise çakışma kaydı kapatılır (SQL hâlâ çakışıyorsa bile inceleme onayı).</summary>
     public bool MarkResolved { get; set; }
 
-    /// <summary><see cref="ConflictResolutionKind"/> int değeri; SQL güncellenmediyse anlamlıdır.</summary>
     public int? ResolutionKind { get; set; }
 }
 

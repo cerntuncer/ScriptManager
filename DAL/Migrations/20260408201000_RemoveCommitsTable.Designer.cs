@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260408201000_RemoveCommitsTable")]
     partial class RemoveCommitsTable
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -27,12 +27,10 @@ namespace API.Controllers
             return CreatedAtAction(nameof(GetById), new { id = result.ReleaseId }, result);
         }
 
-        /// <summary>Sürüm güncelleme API'de desteklenmez.</summary>
         [HttpPut("{id:long}")]
         public IActionResult Update(long id) =>
             BadRequest(new { message = "Release güncelleme kaldırıldı; web arayüzünden yönetin." });
 
-        /// <summary>Sürüm silinmez; iptal endpoint'ini kullanın.</summary>
         [HttpPost("{id:long}/cancel")]
         public async Task<IActionResult> Cancel(long id)
         {

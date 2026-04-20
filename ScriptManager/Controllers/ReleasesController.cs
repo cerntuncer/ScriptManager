@@ -285,7 +285,6 @@ namespace ScriptManager.Controllers
             return View(detail);
         }
 
-        /// <summary>Ajax ile detay gövdesini yenilemek için (klasör listesi, script tablosu, birleşik SQL).</summary>
         [HttpGet]
         public async Task<IActionResult> DetailRefresh(long id)
         {
@@ -302,7 +301,6 @@ namespace ScriptManager.Controllers
             return PartialView("_ReleaseDetailRefresh", detail);
         }
 
-        /// <summary>Seçili scriptlerin ileri SQL'ini tek dosya olarak indirir (sıra = sürüm post-order).</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ExportSelectedSql([FromBody] ExportSelectedSqlRequest? body)
@@ -333,7 +331,6 @@ namespace ScriptManager.Controllers
             return File(bytes, "application/sql", $"{safeVersion}-selected.sql");
         }
 
-        /// <summary>Toplu iptal; sürüm silinmez, paketler havuza döner.</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> BulkCancel([FromBody] CancelReleaseFormRequest? body)
@@ -356,7 +353,6 @@ namespace ScriptManager.Controllers
             });
         }
 
-        /// <summary>Tekil iptal; paketler havuza döner ve kilidi açılır.</summary>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> CancelOne([FromBody] CancelReleaseFormRequest? body)

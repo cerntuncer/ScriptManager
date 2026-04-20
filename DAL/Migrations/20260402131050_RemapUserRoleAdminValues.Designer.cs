@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260402131050_RemapUserRoleAdminValues")]
     partial class RemapUserRoleAdminValues
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

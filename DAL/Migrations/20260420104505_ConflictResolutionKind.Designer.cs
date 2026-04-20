@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260420104505_ConflictResolutionKind")]
     partial class ConflictResolutionKind
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

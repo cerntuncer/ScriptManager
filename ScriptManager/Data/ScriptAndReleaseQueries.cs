@@ -33,7 +33,6 @@ public static class ScriptReadQueries
         return scriptRows.Select(ToListItem).ToList();
     }
 
-    /// <summary>Release ağacı / export satırları için ortak view-model kurulumu.</summary>
     internal static ReleaseScriptItemViewModel ToReleaseScriptItem(Script s, int order, string batchName)
     {
         var tables = SqlReferencedTableExtractor.ExtractTables(s.SqlScript);
@@ -143,7 +142,6 @@ public static class ReleaseReadQueries
         return result;
     }
 
-    /// <summary>Ağaç post-order ile aktif script sırası (birleşik SQL ile aynı).</summary>
     private static List<Script> OrderScriptsForRelease(Release release, List<Batch> batches)
     {
         var byParent = batches.ToLookup(b => b.ParentBatchId);
@@ -175,7 +173,6 @@ public static class ReleaseReadQueries
         return roots.SelectMany(PostWalk).ToList();
     }
 
-    /// <summary>Seçili scriptler için birleşik SQL / rollback (sıra = sürüm ağacı post-order).</summary>
     public static (string sql, string rollback)? BuildExportForScriptSubset(ReleaseDetailViewModel detail,
         IReadOnlyCollection<long> scriptIds)
     {

@@ -4,10 +4,8 @@
 
 namespace DAL.Migrations
 {
-    /// <inheritdoc />
     public partial class BatchIsSealed : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<bool>(
@@ -20,7 +18,6 @@ namespace DAL.Migrations
             migrationBuilder.Sql("UPDATE Batches SET IsSealed = 1 WHERE ReleaseId IS NOT NULL;");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

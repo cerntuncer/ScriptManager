@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260407115529_ScriptConflictNavigations")]
     partial class ScriptConflictNavigations
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

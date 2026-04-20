@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260404142012_Batch_ReleaseId_Nullable")]
     partial class Batch_ReleaseId_Nullable
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -6,7 +6,6 @@ namespace BLL.Features.Batchs
 {
     public static class PoolBatchRules
     {
-        /// <summary>Havuz kökü alt ağacında en az bir script olmalı ve aktif scriptlerin tamamı Hazır olmalı.</summary>
         public static async Task<(bool Ok, string? Error)> ValidateSubtreeReadyForReleaseAsync(
             MyContext db,
             long rootBatchId,

@@ -16,6 +16,5 @@ public class UnresolvedConflictItem
     public long ConflictingScriptId { get; set; }
     public string ConflictingScriptName { get; set; } = null!;
     public DateTime DetectedAt { get; set; }
-    /// <summary>UI uyarı metni: aynı tabloya dokunan iki script; kontrol edin.</summary>
     public string WarningMessage { get; set; } = null!;
 }

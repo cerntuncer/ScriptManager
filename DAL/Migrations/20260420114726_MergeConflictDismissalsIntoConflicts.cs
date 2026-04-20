@@ -1,43 +1,64 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace DAL.Migrations
 {
-    public partial class ConflictPairDismissal : Migration
+    public partial class MergeConflictDismissalsIntoConflicts : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("DELETE FROM Conflicts WHERE ResolvedAt IS NOT NULL;");
+            migrationBuilder.AddColumn<string>(
+                name: "SqlFingerprintMax",
+                table: "Conflicts",
+                type: "nvarchar(64)",
+                maxLength: 64,
+                nullable: true);
 
-            migrationBuilder.Sql(
-                """
-                UPDATE s
-                SET s.Status = COALESCE(s.StatusBeforeConflict, 1),
-                    s.StatusBeforeConflict = NULL
-                FROM Scripts s
-                WHERE s.IsDeleted = 0 AND s.Status = 4
-                AND NOT EXISTS (
-                    SELECT 1 FROM Conflicts c
-                    WHERE c.IsDeleted = 0 AND (c.ScriptId = s.Id OR c.ConflictingScriptId = s.Id)
-                );
+            migrationBuilder.AddColumn<string>(
+                name: "SqlFingerprintMin",
+                table: "Conflicts",
+                type: "nvarchar(64)",
+                maxLength: 64,
+                nullable: true);
+
+            migrationBuilder.Sql("""
+                INSERT INTO [Conflicts] (
+                    [ScriptId], [ConflictingScriptId], [TableName], [Severity], [DetectedAt],
+                    [ResolvedBy], [ResolvedAt], [ResolutionKind],
+                    [CreatedAt], [UpdatedAt], [IsDeleted],
+                    [SqlFingerprintMin], [SqlFingerprintMax]
+                )
+                SELECT
+                    [ScriptIdMin], [ScriptIdMax], N'', 1, [CreatedAt],
+                    [ResolvedByUserId], [CreatedAt], [ResolutionKind],
+                    [CreatedAt], NULL, 0,
+                    [SqlFingerprintMin], [SqlFingerprintMax]
+                FROM [ConflictPairDismissals]
+                WHERE [IsDeleted] = 0;
                 """);
 
+            migrationBuilder.DropTable(name: "ConflictPairDismissals");
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.CreateTable(
                 name: "ConflictPairDismissals",
                 columns: table => new
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    ScriptIdMin = table.Column<long>(type: "bigint", nullable: false),
-                    ScriptIdMax = table.Column<long>(type: "bigint", nullable: false),
-                    SqlFingerprintMin = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    SqlFingerprintMax = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
                     ResolvedByUserId = table.Column<long>(type: "bigint", nullable: true),
-                    ResolutionKind = table.Column<int>(type: "int", nullable: true),
+                    ScriptIdMax = table.Column<long>(type: "bigint", nullable: false),
+                    ScriptIdMin = table.Column<long>(type: "bigint", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false)
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    ResolutionKind = table.Column<int>(type: "int", nullable: true),
+                    SqlFingerprintMax = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    SqlFingerprintMin = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -76,11 +97,14 @@ namespace DAL.Migrations
                 name: "IX_ConflictPairDismissals_ScriptIdMin_ScriptIdMax",
                 table: "ConflictPairDismissals",
                 columns: new[] { "ScriptIdMin", "ScriptIdMax" });
-        }
 
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(name: "ConflictPairDismissals");
+            migrationBuilder.DropColumn(
+                name: "SqlFingerprintMax",
+                table: "Conflicts");
+
+            migrationBuilder.DropColumn(
+                name: "SqlFingerprintMin",
+                table: "Conflicts");
         }
     }
 }

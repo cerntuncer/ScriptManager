@@ -4,10 +4,8 @@
 
 namespace DAL.Migrations
 {
-    /// <inheritdoc />
     public partial class RollbackScriptNvarcharMax_AndCleanup : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterColumn<string>(
@@ -21,7 +19,6 @@ namespace DAL.Migrations
                 oldNullable: true);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterColumn<string>(

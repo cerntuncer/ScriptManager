@@ -4,10 +4,8 @@
 
 namespace DAL.Migrations
 {
-    /// <inheritdoc />
     public partial class ConflictSeverity : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<int>(
@@ -18,7 +16,6 @@ namespace DAL.Migrations
                 defaultValue: 0);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

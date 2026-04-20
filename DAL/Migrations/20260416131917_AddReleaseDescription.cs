@@ -4,10 +4,8 @@
 
 namespace DAL.Migrations
 {
-    /// <inheritdoc />
     public partial class AddReleaseDescription : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -17,7 +15,6 @@ namespace DAL.Migrations
                 nullable: true);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

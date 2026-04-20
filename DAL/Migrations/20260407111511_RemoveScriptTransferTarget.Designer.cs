@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260407111511_RemoveScriptTransferTarget")]
     partial class RemoveScriptTransferTarget
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260407112128_FinallMigrate")]
     partial class FinallMigrate
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

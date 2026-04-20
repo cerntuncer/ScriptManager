@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace DAL.Context;
 
-/// <summary>Design-time migrations; çalışma anında connection string kullanılmaz.</summary>
 public class MyContextFactory : IDesignTimeDbContextFactory<MyContext>
 {
     public MyContext CreateDbContext(string[] args)

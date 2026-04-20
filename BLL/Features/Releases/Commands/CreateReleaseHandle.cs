@@ -8,10 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Features.Releases.Commands
 {
-    /// <summary>
-    /// Yalnızca Release kaydı oluşturur; seçilen havuz paketleri (ve alt ağaçları) aynı hiyerarşiyle
-    /// bu sürüme bağlanır — ekstra üst batch oluşturulmaz.
-    /// </summary>
     public class CreateReleaseHandle : IRequestHandler<CreateReleaseRequest, CreateReleaseResponse>
     {
         private readonly MyContext _db;

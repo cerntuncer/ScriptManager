@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260416131917_AddReleaseDescription")]
     partial class AddReleaseDescription
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

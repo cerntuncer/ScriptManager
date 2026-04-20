@@ -21,6 +21,8 @@ namespace DAL.Configurations
             builder.Property(x => x.Severity).HasConversion<int>().IsRequired();
             builder.Property(x => x.ResolutionKind).HasConversion<int>();
             builder.Property(x => x.DetectedAt).IsRequired();
+            builder.Property(x => x.SqlFingerprintMin).HasMaxLength(64);
+            builder.Property(x => x.SqlFingerprintMax).HasMaxLength(64);
 
             builder.HasOne(x => x.Script)
                 .WithMany()

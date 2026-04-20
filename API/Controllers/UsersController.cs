@@ -24,7 +24,6 @@ namespace API.Controllers
             return Ok(response);
         }
 
-        /// <summary>"list" segmentinin {id} olarak yanlış eşleşmesini engeller.</summary>
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetUserById(int id)
         {

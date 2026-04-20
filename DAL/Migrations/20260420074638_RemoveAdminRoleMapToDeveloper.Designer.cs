@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260420074638_RemoveAdminRoleMapToDeveloper")]
     partial class RemoveAdminRoleMapToDeveloper
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

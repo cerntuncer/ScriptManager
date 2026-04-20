@@ -6,10 +6,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BLL.Features.Releases.Commands;
 
-/// <summary>
-/// Sürümü silmez: iptal eder, tüm paketleri havuza döndürür (ReleaseId null, IsSeal açık),
-/// sarmalayıcı kök batch'i soft-delete eder.
-/// </summary>
 public class CancelReleaseHandle : IRequestHandler<CancelReleaseRequest, CancelReleaseResponse>
 {
     private readonly MyContext _db;

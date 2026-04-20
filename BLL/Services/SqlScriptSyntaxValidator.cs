@@ -5,17 +5,10 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace BLL.Services;
 
-/// <summary>
-/// 1) Tek kelimelik / anlamsız batch heuristiği
-/// 2) ScriptDom parse hataları
-/// 3) SQL Server: <c>SET NOEXEC ON</c> — çalıştırmadan derleme; <c>NVAAARCHAR</c> gibi geçersiz türler PARSEONLY’de kaçabilir, NOEXEC yakalar.
-///    Her batch kendi komutunda <c>SET NOEXEC ON;</c> + metin (havuz bağlantılarında oturum sıfırlanmasına karşı).
-/// </summary>
 public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
 {
     private static readonly TSqlParser Parser = new TSql160Parser(false);
 
-    /// <summary>Tek başına geçerli sayılabilecek tek kelimelik ifadeler (migration’da nadir).</summary>
     private static readonly HashSet<string> StandaloneSingleWordOk = new(StringComparer.OrdinalIgnoreCase)
     {
         "COMMIT", "ROLLBACK", "BEGIN", "END", "RETURN", "BREAK", "CONTINUE"
@@ -58,9 +51,6 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         return new SqlScriptSyntaxResult { IsValid = issues.Count == 0, Issues = issues };
     }
 
-    /// <summary>
-    /// Tek satır, tek "kelime", tırnak/parantez yok → geçerli T-SQL değil (ör. rastgele string).
-    /// </summary>
     private static void AppendHeuristicBareBatchIssues(
         IReadOnlyList<string> batches,
         string prefix,
@@ -107,9 +97,6 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         }
     }
 
-    /// <summary>
-    /// MySQL / PostgreSQL sözdizimleri tespit edildiğinde T-SQL karşılığını öneren uyarılar üretir.
-    /// </summary>
     private static void AppendMysqlDialectHints(
         IReadOnlyList<string> batches,
         string prefix,
@@ -170,16 +157,10 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         return list;
     }
 
-    /// CREATE/ALTER PROCEDURE, VIEW, FUNCTION, TRIGGER gibi DDL'ler bir batch'te
-    /// ilk statement olmak zorunda — SET NOEXEC ON öncesine koyulamaz; bu batches atlanır.
     private static readonly Regex DdlFirstStatementPattern = new(
         @"^\s*(CREATE|ALTER)\s+(OR\s+ALTER\s+)?(PROCEDURE|PROC|VIEW|FUNCTION|TRIGGER)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    /// <summary>
-    /// Her batch: <c>SET NOEXEC ON</c> + metin tek <see cref="SqlCommand"/> içinde (derleme hataları; geçersiz veri türü adları dahil).
-    /// DDL batches (PROCEDURE/VIEW/FUNCTION/TRIGGER) ScriptDom tarafından zaten kontrol edildiğinden atlanır.
-    /// </summary>
     private SqlScriptSyntaxResult? TryValidateWithSqlServerNoExec(IReadOnlyList<string> batches, string prefix)
     {
         try
@@ -312,7 +293,6 @@ public sealed class SqlScriptSyntaxValidator : ISqlScriptSyntaxValidator
         return new SqlScriptSyntaxResult { IsValid = issues.Count == 0, Issues = issues };
     }
 
-    /// <summary>SSMS'teki gibi; satırı yalnızca GO olan yerlerden böler.</summary>
     internal static IEnumerable<string> SplitGoBatches(string sql)
     {
         var normalized = sql.Replace("\r\n", "\n").Replace('\r', '\n');

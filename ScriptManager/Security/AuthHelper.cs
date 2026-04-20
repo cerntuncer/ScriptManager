@@ -13,7 +13,6 @@ public static class AuthHelper
         return long.TryParse(v, out var id) ? id : null;
     }
 
-    /// <summary>Oturum açık kullanıcının Id claim değeri.</summary>
     public static async Task<long> GetActorUserIdAsync(ClaimsPrincipal user, MyContext db,
         CancellationToken cancellationToken = default)
     {
@@ -30,20 +29,15 @@ public static class AuthHelper
     public static bool IsTester(ClaimsPrincipal user) =>
         user.Identity?.IsAuthenticated == true && user.IsInRole(nameof(UserRole.Tester));
 
-    /// <summary>Geliştirici script oluşturma/güncelleme yapabilir.</summary>
     public static bool CanAuthorScripts(ClaimsPrincipal user) => IsDeveloper(user);
 
-    /// <summary>Batch/sürüm yazma, çakışma çözümü vb. (testçi hariç).</summary>
     public static bool CanWriteOperational(ClaimsPrincipal user) => IsDeveloper(user);
 
-    /// <summary>Çakışmayı kapatma / inceleme kaydı.</summary>
     public static bool CanResolveConflicts(ClaimsPrincipal user) => IsDeveloper(user);
 
-    /// <summary>Çakışma eşleştirme JSON (okuma); testçi inceleyebilir, kayıt yine geliştirici.</summary>
     public static bool CanViewConflictPair(ClaimsPrincipal user) =>
         CanResolveConflicts(user) || IsTester(user);
 
-    /// <summary>Taslak scripti Hazır yapma: ilgili geliştirici veya testçi.</summary>
     public static bool CanMarkDraftScriptReady(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
     {
         if (status != ScriptStatus.Draft) return false;
@@ -57,7 +51,6 @@ public static class AuthHelper
         return false;
     }
 
-    /// <summary>Taslak, incelemede veya eski Çakışma kaydındaki script içeriğini düzenleme: sahip geliştirici.</summary>
     public static bool CanEditDraftScriptContent(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
     {
         if (status != ScriptStatus.Draft && status != ScriptStatus.PendingTesterReview && status != ScriptStatus.Conflict)
@@ -71,7 +64,6 @@ public static class AuthHelper
         return false;
     }
 
-    /// <summary>Taslak scripti testçi incelemesine gönderme (yalnızca sahip geliştirici).</summary>
     public static bool CanSendDraftToTester(ClaimsPrincipal user, long scriptDeveloperId, ScriptStatus status)
     {
         if (status != ScriptStatus.Draft) return false;
@@ -80,7 +72,6 @@ public static class AuthHelper
         return id.HasValue && id.Value == scriptDeveloperId;
     }
 
-    /// <summary>Testçi incelemesindeki scripti Hazır yapma.</summary>
     public static bool CanApprovePendingTesterReview(ClaimsPrincipal user, ScriptStatus status) =>
         IsTester(user) && status == ScriptStatus.PendingTesterReview;
 

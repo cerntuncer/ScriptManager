@@ -7,17 +7,14 @@ namespace ScriptManager.Models.Script
         public long ScriptId { get; set; }
         public long? BatchId { get; set; }
 
-        /// <summary>Liste satırı için (AJAX oluşturma sonrası).</summary>
         public string? ScriptName { get; set; }
         public string? Status { get; set; }
-        /// <summary>Badge CSS sınıfı için enum adı: "Draft", "Ready", "Conflict".</summary>
         public string? StatusKey { get; set; }
         public string? BatchName { get; set; }
         public string? DeveloperName { get; set; }
         public bool HasRollback { get; set; }
         public string? CreatedAtDisplay { get; set; }
 
-        /// <summary>Listede sil butonu (oluşturandan hemen sonra satır eklerken).</summary>
         public bool CanDelete { get; set; }
     }
 }

@@ -8,9 +8,6 @@ namespace ScriptManager.Data;
 
 public static class PoolBatchQueries
 {
-    /// <summary>
-    /// Tüm havuz kökleri + aktif sürümlerin kök paketleri (aynı ağaçta). İptal sürümlerin batch'leri havuzda ReleaseId null olduğundan burada görünmez.
-    /// </summary>
     public static async Task<List<PoolBatchTreeNodeDto>> GetPoolBatchTreeAsync(MyContext db,
         CancellationToken cancellationToken = default)
     {

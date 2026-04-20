@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260420111743_ConflictTableNameWidenForMergedTopics")]
     partial class ConflictTableNameWidenForMergedTopics
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

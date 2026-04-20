@@ -31,10 +31,6 @@ public class BatchesController : Controller
         return View(tree);
     }
 
-    /// <summary>
-    /// Havuz: releaseId yok; parentBatchId 0 = kökler.
-    /// Release (düzenleme): releaseId dolu; parentBatchId 0 = sürüm kökünün bir altı.
-    /// </summary>
     [HttpGet]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> TreeChildren(long? releaseId, long parentBatchId = 0)
@@ -173,7 +169,6 @@ public class BatchesController : Controller
         return Json(new { children = rows });
     }
 
-    /// <summary>Kökten yaprağa doğru kimlik sırası (script/release sihirbazında ön konumlama için).</summary>
     [HttpGet]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> BatchPath(long batchId, long? releaseId = null)
@@ -238,7 +233,6 @@ public class BatchesController : Controller
         }
     }
 
-    /// <summary>Yalnızca havuz (ReleaseId null) ağacına alt veya kök batch ekler.</summary>
     [HttpPost]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> AddPoolFolder([FromBody] AddFolderFormRequest? body)
@@ -337,7 +331,6 @@ public class BatchesController : Controller
         return Json(new { success = true, message = $"\"{root.Name}\" versiyonu ve içeriği silindi." });
     }
 
-    /// <summary>Havuz / sürüm ağacındaki kilitsiz klasör adını günceller (aynı üst + sürüm kapsamında tekil ad).</summary>
     [HttpPost]
     [IgnoreAntiforgeryToken]
     public async Task<IActionResult> RenamePoolBatch([FromBody] RenamePoolBatchBody? body)

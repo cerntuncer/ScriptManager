@@ -13,13 +13,10 @@
         public List<ReleaseScriptItemViewModel> Scripts { get; set; } = new();
         public List<ReleaseBatchFolderViewModel> FolderTree { get; set; } = new();
 
-        /// <summary>Release ağacı paketlendiyse; yeni script/klasör/taşıma kapalı.</summary>
         public bool IsTreeLocked { get; set; }
 
-        /// <summary>İptal edilmiş sürüm; paketler havuza dönmüştür.</summary>
         public bool IsCancelled { get; set; }
 
-        /// <summary>Bu release içindeki batch'ler; taşıma hedefi seçimi.</summary>
         public List<BatchPickerOptionViewModel> BatchPickerOptions { get; set; } = new();
 
     }
@@ -41,7 +38,6 @@
         public string DeveloperName { get; set; } = string.Empty;
         public string ReferencedTablesDisplay { get; set; } = "—";
 
-        /// <summary>Seçili script export; ağaç görünümünde gösterilmeyebilir.</summary>
         public string SqlScript { get; set; } = string.Empty;
         public string? RollbackScript { get; set; }
     }

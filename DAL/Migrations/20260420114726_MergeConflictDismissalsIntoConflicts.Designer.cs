@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DAL.Migrations
 {
     [DbContext(typeof(MyContext))]
-    [Migration("20260407115250_ScriptRemoveConflictNavigations")]
-    partial class ScriptRemoveConflictNavigations
+    [Migration("20260420114726_MergeConflictDismissalsIntoConflicts")]
+    partial class MergeConflictDismissalsIntoConflicts
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
@@ -41,6 +41,9 @@ namespace DAL.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -66,45 +69,6 @@ namespace DAL.Migrations
                     b.ToTable("Batches", (string)null);
                 });
 
-            modelBuilder.Entity("DAL.Entities.Commit", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<long>("ScriptId")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ScriptId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("Commits", (string)null);
-                });
-
             modelBuilder.Entity("DAL.Entities.Conflict", b =>
                 {
                     b.Property<long>("Id")
@@ -125,6 +89,9 @@ namespace DAL.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("ResolutionKind")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("datetime2");
 
@@ -134,10 +101,20 @@ namespace DAL.Migrations
                     b.Property<long>("ScriptId")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("Severity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SqlFingerprintMax")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("SqlFingerprintMin")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("TableName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -167,10 +144,18 @@ namespace DAL.Migrations
                     b.Property<long>("CreatedBy")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsCancelled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -198,7 +183,8 @@ namespace DAL.Migrations
                     b.HasIndex("RootBatchId");
 
                     b.HasIndex("Version")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsCancelled] = CAST(0 AS bit) AND [IsDeleted] = CAST(0 AS bit)");
 
                     b.ToTable("Releases", (string)null);
                 });
@@ -380,25 +366,6 @@ namespace DAL.Migrations
                     b.Navigation("Release");
                 });
 
-            modelBuilder.Entity("DAL.Entities.Commit", b =>
-                {
-                    b.HasOne("DAL.Entities.Script", "Script")
-                        .WithMany("Commits")
-                        .HasForeignKey("ScriptId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DAL.Entities.User", "User")
-                        .WithMany("Commits")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Script");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("DAL.Entities.Conflict", b =>
                 {
                     b.HasOne("DAL.Entities.Script", "ConflictingScript")
@@ -484,15 +451,8 @@ namespace DAL.Migrations
                     b.Navigation("Batches");
                 });
 
-            modelBuilder.Entity("DAL.Entities.Script", b =>
-                {
-                    b.Navigation("Commits");
-                });
-
             modelBuilder.Entity("DAL.Entities.User", b =>
                 {
-                    b.Navigation("Commits");
-
                     b.Navigation("CreateBatches");
 
                     b.Navigation("CreatedReleases");

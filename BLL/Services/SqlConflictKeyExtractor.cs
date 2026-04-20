@@ -3,37 +3,10 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 
 namespace BLL.Services;
 
-/// <summary>
-/// T-SQL metninden conflict tespiti için yapısal anahtarlar çıkarır.
-///
-/// Tespit edilen conflict tipleri:
-/// ┌──────────────────────────────────────────────────────────────────┐
-/// │  Tip          │ Örnek SQL                                        │
-/// ├──────────────────────────────────────────────────────────────────┤
-/// │  Record       │ WHERE ID = 5  /  WHERE UserId IN (1,2,3)         │
-/// │               │ Herhangi bir "*Id" veya "*ID" kolonu desteklenir │
-/// ├──────────────────────────────────────────────────────────────────┤
-/// │  Table DDL    │ ALTER TABLE Users ...                            │
-/// │               │ CREATE TABLE Orders ...                          │
-/// │               │ DROP TABLE Logs                                  │
-/// │               │ TRUNCATE TABLE Sessions                          │
-/// ├──────────────────────────────────────────────────────────────────┤
-/// │  Object DDL   │ CREATE OR ALTER PROCEDURE GetUsers ...           │
-/// │               │ ALTER VIEW UserSummary ...                       │
-/// │               │ CREATE FUNCTION dbo.CalcTotal ...                │
-/// ├──────────────────────────────────────────────────────────────────┤
-/// │  DML (genel)  │ INSERT INTO / UPDATE / DELETE / MERGE            │
-/// │               │ Kayıt bazlı eşleşme yoksa tablo DDL ile çakışır │
-/// └──────────────────────────────────────────────────────────────────┘
-///
-/// Birincil yöntem: ScriptDom AST ziyaretçisi (yapısal, doğru).
-/// Parse başarısız olursa: regex tabanlı fallback otomatik devreye girer.
-/// </summary>
 public static class SqlConflictKeyExtractor
 {
     private static readonly TSqlParser Parser = new TSql160Parser(false);
 
-    /// <summary>Tek SQL metninden conflict key'leri çıkarır.</summary>
     public static HashSet<ConflictKey> Extract(string? sql)
     {
         var result = new HashSet<ConflictKey>();
@@ -64,7 +37,6 @@ public static class SqlConflictKeyExtractor
         return result;
     }
 
-    /// <summary>SqlScript ve RollbackScript'in birleşik key setini döner.</summary>
     public static HashSet<ConflictKey> ExtractFromScript(string? sqlScript, string? rollbackScript)
     {
         var result = Extract(sqlScript);

@@ -7,7 +7,6 @@ namespace ScriptManager.Models.Script
         public string? RollbackScript { get; set; }
         public long DeveloperId { get; set; }
 
-        /// <summary>Havuzdaki yaprak batch veya boş.</summary>
         public long? BatchId { get; set; }
     }
 }

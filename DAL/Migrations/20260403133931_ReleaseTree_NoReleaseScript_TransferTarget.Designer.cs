@@ -15,7 +15,6 @@ namespace DAL.Migrations
     [Migration("20260403133931_ReleaseTree_NoReleaseScript_TransferTarget")]
     partial class ReleaseTree_NoReleaseScript_TransferTarget
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

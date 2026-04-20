@@ -23,7 +23,6 @@ namespace BLL.Features.Scripts.Queries
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
 
-        /// <summary>Özet uyarı; açık çakışma yoksa null.</summary>
         public string? ConflictSummaryWarning { get; set; }
 
         public List<ScriptOpenConflictDto> OpenConflicts { get; set; } = new();

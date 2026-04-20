@@ -6,7 +6,6 @@ namespace ScriptManager.Models.Batch
         public long CreatedBy { get; set; }
     }
 
-    /// <summary>API POST api/Batch gövdesi.</summary>
     public class ApiCreateBatchRequest
     {
         public string Name { get; set; } = string.Empty;

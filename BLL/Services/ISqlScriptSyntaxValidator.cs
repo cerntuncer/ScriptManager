@@ -5,7 +5,6 @@ namespace BLL.Services;
 
 public interface ISqlScriptSyntaxValidator
 {
-    /// <param name="labelPrefix">Örn. "SQL" veya "Rollback"</param>
     SqlScriptSyntaxResult Validate(string? sqlText, string labelPrefix);
 }
 

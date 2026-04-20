@@ -14,7 +14,6 @@ namespace ScriptManager.Models.Script
         public string DeveloperName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
 
-        /// <summary>Durum akışı (taslak / test / hazır / çakışma) için.</summary>
         public ScriptStatus StatusEnum { get; set; }
 
         public string StatusDisplay { get; set; } = string.Empty;

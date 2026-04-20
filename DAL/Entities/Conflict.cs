@@ -12,8 +12,12 @@ namespace DAL.Entities
         public DateTime DetectedAt { get; set; }//conflict tespit zamanı
         public long? ResolvedBy { get; set; }
         public DateTime? ResolvedAt { get; set; }
-        /// <summary>Kapatılırken doldurulur: düzeltildi mi, yoksa düzeltmeden mi çözümlendi.</summary>
         public ConflictResolutionKind? ResolutionKind { get; set; }
+
+        public string? SqlFingerprintMin { get; set; }
+
+        public string? SqlFingerprintMax { get; set; }
+
         public Script Script { get; set; } = null!;
         public Script ConflictingScript { get; set; } = null!;
         public User? ResolvedByUser { get; set; } = null!;

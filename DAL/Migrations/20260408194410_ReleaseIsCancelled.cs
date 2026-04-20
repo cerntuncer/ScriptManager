@@ -4,10 +4,8 @@
 
 namespace DAL.Migrations
 {
-    /// <inheritdoc />
     public partial class ReleaseIsCancelled : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
@@ -29,7 +27,6 @@ namespace DAL.Migrations
                 filter: "[IsCancelled] = CAST(0 AS bit) AND [IsDeleted] = CAST(0 AS bit)");
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(

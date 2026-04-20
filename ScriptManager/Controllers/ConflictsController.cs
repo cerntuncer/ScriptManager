@@ -31,7 +31,6 @@ public class ConflictsController : Controller
         return View(new ConflictsIndexViewModel { Rows = rows, ResolvedRows = resolvedRows });
     }
 
-    /// <summary>Üst çubuktaki çakışma rozetini AJAX ile yenilemek için.</summary>
     [HttpGet]
     public async Task<IActionResult> CountBadge()
     {
@@ -84,7 +83,6 @@ public class ConflictsController : Controller
     {
         public long ConflictId { get; set; }
 
-        /// <summary><see cref="ConflictResolutionKind"/>: 1 = düzeltildi, 2 = düzeltmeden (varsayılan 2).</summary>
         public int? ResolutionKind { get; set; }
     }
 

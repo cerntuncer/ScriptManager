@@ -2,9 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace BLL.Services;
 
-/// <summary>
-/// SQL metninden olası tablo/nesne adlarını kaba regex ile çıkarır (uyarı amaçlı; tam SQL parser değildir).
-/// </summary>
 public static class SqlReferencedTableExtractor
 {
     // DML — veri değiştiren ifadeler
@@ -45,7 +42,6 @@ public static class SqlReferencedTableExtractor
     private static readonly Regex BlockCommentRx = new(@"/\*[\s\S]*?\*/", RegexOptions.Compiled);
     private static readonly Regex LineCommentRx = new(@"--[^\r\n]*", RegexOptions.Compiled);
 
-    /// <summary>Yorum ve açıklama blokları regex'i yanıltmasın diye kaldırılır.</summary>
     private static string StripSqlComments(string sql)
     {
         var s = BlockCommentRx.Replace(sql, " ");
@@ -93,13 +89,6 @@ public static class SqlReferencedTableExtractor
         "ACID", "AVOID", "FORBID", "INVALID", "VALID", "REBUILD", "PERIOD"
     };
 
-    /// <summary>
-    /// SQL metninden kayıt bazlı ID değerlerini çıkarır.
-    /// Desteklenen kalıplar:
-    ///   ID = 42             → "ID:42"
-    ///   UserId = 42         → "USERID:42"
-    ///   OrderId IN (1,2,3)  → "ORDERID:1", "ORDERID:2", "ORDERID:3"
-    /// </summary>
     public static HashSet<string> ExtractRecordIds(string? sql)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -131,10 +120,6 @@ public static class SqlReferencedTableExtractor
         return set;
     }
 
-    /// <summary>
-    /// Köşeli parantez ve tırnak işaretlerini temizler; şema önekini korur.
-    /// Örn: [dbo].[Users] → dbo.Users | Users → Users
-    /// </summary>
     private static string NormalizeObjectName(string raw)
     {
         var s = raw.Trim();
