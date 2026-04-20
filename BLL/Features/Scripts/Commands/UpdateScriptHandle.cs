@@ -110,6 +110,15 @@ namespace BLL.Features.Scripts.Commands
             var newStatus = script.Status;
             if (request.Status.HasValue)
             {
+                if (script.Status == ScriptStatus.Conflict)
+                {
+                    await _conflictSync.RecomputeScriptStatusAsync(script.Id, cancellationToken);
+                    script = await _db.Scripts.FirstOrDefaultAsync(s => s.Id == request.ScriptId && !s.IsDeleted,
+                        cancellationToken);
+                    if (script == null)
+                        return new UpdateScriptResponse { Success = false, Message = "Script bulunamadı." };
+                }
+
                 newStatus = (ScriptStatus)request.Status.Value;
                 if (newStatus == ScriptStatus.Conflict)
                     return new UpdateScriptResponse { Success = false, Message = "Çakışma durumu yalnızca sistem tarafından atanır." };

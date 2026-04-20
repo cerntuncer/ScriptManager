@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace BLL.Services;
@@ -35,6 +36,8 @@ public static class SqlReferencedTableExtractor
         "SET", "WITH", "TOP", "JOIN", "FROM", "INTO", "WHERE", "BY", "AS",
         // Açıklama / araç metinlerinde geçen "UPDATE command(s)" vb. yanlış yakalanmasın
         "COMMAND", "COMMANDS",
+        // PRINT N'Update complete.' gibi metinlerdeki "UPDATE complete" yanlış eşleşmesi
+        "COMPLETE",
         // İstatistik / yardımcı ifadeler
         "STATISTICS"
     };
@@ -48,12 +51,68 @@ public static class SqlReferencedTableExtractor
         return LineCommentRx.Replace(s, " ");
     }
 
+    private static string StripSqlStringLiterals(string sql)
+    {
+        var sb = new StringBuilder(sql.Length);
+        for (var i = 0; i < sql.Length;)
+        {
+            if (i < sql.Length - 1 && (sql[i] == 'N' || sql[i] == 'n') && sql[i + 1] == '\'')
+            {
+                i += 2;
+                i = SkipSingleQuotedStringRun(sql, i);
+                sb.Append(' ');
+                continue;
+            }
+
+            if (sql[i] == '\'')
+            {
+                i++;
+                i = SkipSingleQuotedStringRun(sql, i);
+                sb.Append(' ');
+                continue;
+            }
+
+            sb.Append(sql[i]);
+            i++;
+        }
+
+        return sb.ToString();
+    }
+
+    private static int SkipSingleQuotedStringRun(string sql, int i)
+    {
+        while (i < sql.Length)
+        {
+            if (sql[i] == '\'')
+            {
+                if (i + 1 < sql.Length && sql[i + 1] == '\'')
+                {
+                    i += 2;
+                    continue;
+                }
+
+                return i + 1;
+            }
+
+            i++;
+        }
+
+        return i;
+    }
+
+    private static string PrepareSqlForObjectScan(string sql)
+    {
+        sql = StripSqlComments(sql);
+        sql = StripSqlStringLiterals(sql);
+        return sql;
+    }
+
     public static HashSet<string> ExtractTables(string? sql)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(sql)) return set;
 
-        sql = StripSqlComments(sql);
+        sql = PrepareSqlForObjectScan(sql);
 
         foreach (var rx in DmlPatterns)
             AddMatches(rx, sql, set);
@@ -94,7 +153,7 @@ public static class SqlReferencedTableExtractor
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(sql)) return set;
 
-        sql = StripSqlComments(sql);
+        sql = PrepareSqlForObjectScan(sql);
 
         foreach (Match m in RecordEqPattern.Matches(sql))
         {

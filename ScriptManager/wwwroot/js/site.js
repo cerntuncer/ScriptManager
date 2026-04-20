@@ -382,6 +382,20 @@ function effectiveUserIdFromForm(selectValueRaw) {
     return fall > 0 ? fall : 0;
 }
 
+/** Oturum kullanıcısı için "Oluşturan" satırında gösterilecek metin (ad/e-posta veya id). */
+function sessionCreatorDisplay(meta) {
+    meta = meta || { developers: [] };
+    const actorId = effectiveUserIdFromForm("");
+    let s = (document.body?.dataset?.currentUserName || "").trim();
+    if (!s && meta.developers?.length && actorId > 0) {
+        const me = meta.developers.find((d) => Number(d.id) === Number(actorId));
+        if (me) s = `${me.name} (${me.email})`;
+    }
+    if (!s && actorId > 0) s = `Kullanıcı #${actorId}`;
+    if (!s) s = "—";
+    return s;
+}
+
 function showToast(message, type = "success") {
     const container = document.getElementById("toastContainer");
     if (!container) return;
@@ -1006,16 +1020,12 @@ async function ensureScriptWizardHasDefaultFolder() {
     const first = await fetchTreeChildrenList(null, 0);
     if (first.children && first.children.length > 0) return false;
 
-    const createdBy = effectiveUserIdFromForm("");
-    if (!createdBy) return false;
-
     const res = await fetch(addUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
             parentBatchId: 0,
-            name: "Genel Klasör",
-            createdBy
+            name: "Genel Klasör"
         })
     });
     if (!res.ok) return false;
@@ -1157,15 +1167,7 @@ function openPoolChildBatchModal(parentId, linkedReleaseId) {
 
 function openPoolBatchNameModalInner(title, fieldLabel, btnLabel) {
     const meta = { ...(window.__scriptCreateMeta || { developers: [] }) };
-    const devOpts =
-        meta.developers && meta.developers.length
-            ? meta.developers
-                  .map(
-                      (d) =>
-                          `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`
-                  )
-                  .join("")
-            : `<option value="">Kayıtlı kullanıcı bulunamadı</option>`;
+    const creatorLine = escapeHtml(sessionCreatorDisplay(meta));
     const content = `
         <form id="poolBatchCreateForm" class="row g-3">
             <div class="col-12">
@@ -1174,7 +1176,8 @@ function openPoolBatchNameModalInner(title, fieldLabel, btnLabel) {
             </div>
             <div class="col-12">
                 <label class="form-label">Oluşturan</label>
-                <select id="poolBatchCreatedBy" class="form-select">${devOpts}</select>
+                <p class="form-control-plaintext mb-0 small border rounded px-3 py-2 bg-light">${creatorLine}</p>
+                <p class="small text-muted mb-0 mt-1">Oturumunuzdaki kullanıcı kaydedilir.</p>
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
@@ -1190,8 +1193,6 @@ async function submitPoolBatchCreate() {
         ? (window.__batchesPageUrls?.addReleaseFolder)
         : (window.__batchesPageUrls?.addPoolFolder);
     const name = document.getElementById("poolBatchNameInput")?.value?.trim();
-    const createdByRaw = document.getElementById("poolBatchCreatedBy")?.value?.trim();
-    const createdBy = effectiveUserIdFromForm(createdByRaw);
     const parentBatchId = window.__pendingPoolBatchParentId || 0;
 
     if (!url) {
@@ -1202,15 +1203,11 @@ async function submitPoolBatchCreate() {
         showToast("Klasör adı girin.", "error");
         return;
     }
-    if (!createdBy) {
-        showToast("Oluşturan kullanıcıyı seçin.", "error");
-        return;
-    }
 
     const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ parentBatchId, name, createdBy })
+        body: JSON.stringify({ parentBatchId, name })
     });
 
     let data = null;
@@ -1320,15 +1317,7 @@ function openAddSubfolderModal(parentBatchId) {
     if (!pid) return;
 
     const meta = { ...(window.__scriptCreateMeta || { developers: [] }) };
-    const devOpts =
-        meta.developers && meta.developers.length
-            ? meta.developers
-                  .map(
-                      (d) =>
-                          `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`
-                  )
-                  .join("")
-            : `<option value="">Kayıtlı kullanıcı bulunamadı</option>`;
+    const creatorLine = escapeHtml(sessionCreatorDisplay(meta));
 
     const addUrl = window.__releaseDetailUrls?.addFolder;
     if (!addUrl) {
@@ -1349,7 +1338,8 @@ function openAddSubfolderModal(parentBatchId) {
             </div>
             <div class="col-md-12">
                 <label class="form-label">Oluşturan</label>
-                <select id="subfolderCreatedBy" class="form-select">${devOpts}</select>
+                <p class="form-control-plaintext mb-0 small border rounded px-3 py-2 bg-light">${creatorLine}</p>
+                <p class="small text-muted mb-0 mt-1">Oturumunuzdaki kullanıcı kaydedilir.</p>
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
@@ -1364,8 +1354,6 @@ function openAddSubfolderModal(parentBatchId) {
 async function submitAddSubfolder() {
     const url = window.__releaseDetailUrls?.addFolder;
     const name = document.getElementById("subfolderName")?.value?.trim();
-    const createdByRaw = document.getElementById("subfolderCreatedBy")?.value?.trim();
-    const createdBy = effectiveUserIdFromForm(createdByRaw);
     const parentBatchId = window.__pendingSubfolderParentId || 0;
 
     if (!url || !parentBatchId) {
@@ -1376,15 +1364,11 @@ async function submitAddSubfolder() {
         showToast("Klasör adı girin.", "error");
         return;
     }
-    if (!createdBy) {
-        showToast("Oluşturan kullanıcıyı seçin.", "error");
-        return;
-    }
 
     const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ parentBatchId, name, createdBy })
+        body: JSON.stringify({ parentBatchId, name })
     });
 
     let data = null;
@@ -1416,15 +1400,7 @@ function openReleaseDetailAddSubbatchModal() {
     }
 
     const meta = { ...(window.__scriptCreateMeta || { developers: [] }) };
-    const devOpts =
-        meta.developers && meta.developers.length
-            ? meta.developers
-                  .map(
-                      (d) =>
-                          `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`
-                  )
-                  .join("")
-            : `<option value="">Kayıtlı kullanıcı bulunamadı</option>`;
+    const creatorLine = escapeHtml(sessionCreatorDisplay(meta));
     const list = window.__releaseDetailBatches || [];
     const batchOpts =
         `<option value="0">— Üst klasörün hemen altına —</option>` +
@@ -1443,7 +1419,8 @@ function openReleaseDetailAddSubbatchModal() {
             </div>
             <div class="col-md-12">
                 <label class="form-label">Oluşturan</label>
-                <select id="releaseDetailSubfolderCreatedBy" class="form-select">${devOpts}</select>
+                <p class="form-control-plaintext mb-0 small border rounded px-3 py-2 bg-light">${creatorLine}</p>
+                <p class="small text-muted mb-0 mt-1">Oturumunuzdaki kullanıcı kaydedilir.</p>
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
@@ -1460,8 +1437,6 @@ async function submitReleaseDetailAddSubfolder() {
     const parentBatchId = Number(document.getElementById("releaseDetailParentBatchId")?.value || 0);
     const releaseId = window.__releaseDetailMeta?.releaseId ?? 0;
     const name = document.getElementById("releaseDetailSubfolderName")?.value?.trim();
-    const createdByRaw = document.getElementById("releaseDetailSubfolderCreatedBy")?.value?.trim();
-    const createdBy = effectiveUserIdFromForm(createdByRaw);
 
     if (!url) {
         showToast("İstek adresi eksik.", "error");
@@ -1475,15 +1450,11 @@ async function submitReleaseDetailAddSubfolder() {
         showToast("Klasör adı girin.", "error");
         return;
     }
-    if (!createdBy) {
-        showToast("Oluşturan kullanıcıyı seçin.", "error");
-        return;
-    }
 
     const payload =
         parentBatchId > 0
-            ? { parentBatchId, name, createdBy }
-            : { parentBatchId: 0, releaseId, name, createdBy };
+            ? { parentBatchId, name }
+            : { parentBatchId: 0, releaseId, name };
 
     const res = await fetch(url, {
         method: "POST",
@@ -1986,10 +1957,7 @@ async function openCreateReleaseModal() {
     if (devData && Array.isArray(devData.developers) && devData.developers.length > 0)
         meta.developers = devData.developers;
 
-    const devOpts =
-        meta.developers && meta.developers.length
-            ? meta.developers.map((d) => `<option value="${d.id}">${escapeHtml(d.name)} (${escapeHtml(d.email)})</option>`).join("")
-            : `<option value="">Kayıtlı kullanıcı bulunamadı</option>`;
+    const creatorDisplay = sessionCreatorDisplay(meta);
 
     // Pool'daki mevcut versiyonları yükle
     const { children: poolVersions } = await fetchTreeChildrenList(null, 0);
@@ -2031,7 +1999,8 @@ async function openCreateReleaseModal() {
             </div>
             <div class="col-md-12">
                 <label class="form-label fw-semibold">Oluşturan</label>
-                <select id="releaseCreatedBy" class="form-select">${devOpts}</select>
+                <p class="form-control-plaintext mb-0 small border rounded px-3 py-2 bg-light">${escapeHtml(creatorDisplay)}</p>
+                <p class="small text-muted mb-0 mt-1">Oturumunuzdaki kullanıcı kaydedilir.</p>
             </div>
             <div class="col-12 d-flex justify-content-end gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
@@ -2093,8 +2062,6 @@ async function submitCreateRelease() {
 
     const name = document.getElementById("releaseName")?.value?.trim();
     const description = document.getElementById("releaseDescription")?.value?.trim() || null;
-    const createdByRaw = document.getElementById("releaseCreatedBy")?.value?.trim();
-    const createdBy = effectiveUserIdFromForm(createdByRaw);
     const selectedVersionEl = document.querySelector(".rel-vpick-radio:checked");
     const selectedVersionId = selectedVersionEl ? Number(selectedVersionEl.value) : 0;
 
@@ -2106,16 +2073,11 @@ async function submitCreateRelease() {
         showToast("Bir versiyon seçin.", "error");
         return;
     }
-    if (!createdBy) {
-        showToast("Oluşturan kullanıcıyı seçin.", "error");
-        return;
-    }
 
     const payload = {
         name,
         version: name,
         description,
-        createdBy,
         rootMode: "existing",
         existingRootBatchId: selectedVersionId,
         newRootBatchName: null

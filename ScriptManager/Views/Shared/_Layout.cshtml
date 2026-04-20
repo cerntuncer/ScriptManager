@@ -18,6 +18,7 @@
 </head>
 <body data-script-create-url="@Url.Action("Create", "Scripts")"
       data-current-user-id="@uidStr"
+      data-current-user-name="@(HttpContextAccessor.HttpContext?.User?.Identity?.Name ?? "")"
       data-conflicts-count-badge-url="@Url.Action("CountBadge", "Conflicts")">
     <div class="app-shell">
         <aside id="sidebar" class="app-sidebar">

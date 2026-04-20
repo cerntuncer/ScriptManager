@@ -30,15 +30,25 @@ namespace BLL.Features.Batchs
             }
 
             var subIds = inSubtree.ToList();
-            var statuses = await db.Scripts.AsNoTracking()
+            var treeScripts = await db.Scripts.AsNoTracking()
                 .Where(s => s.BatchId != null && subIds.Contains(s.BatchId.Value) && !s.IsDeleted && s.Status != ScriptStatus.Deleted)
-                .Select(s => s.Status)
+                .Select(s => new { s.Id, s.Status })
                 .ToListAsync(cancellationToken);
 
-            if (statuses.Count == 0)
+            if (treeScripts.Count == 0)
                 return (false, $"\"{await BatchNameAsync(db, rootBatchId, cancellationToken)}\" altında en az bir script olmalı.");
 
-            if (statuses.Any(s => s != ScriptStatus.Ready))
+            var idSet = treeScripts.Select(s => s.Id).ToHashSet();
+            var openConflict = await db.Conflicts.AsNoTracking()
+                .AnyAsync(c =>
+                        !c.IsDeleted &&
+                        c.ResolvedAt == null &&
+                        (idSet.Contains(c.ScriptId) || idSet.Contains(c.ConflictingScriptId)),
+                    cancellationToken);
+            if (openConflict)
+                return (false, $"\"{await BatchNameAsync(db, rootBatchId, cancellationToken)}\" altında çözülmemiş çakışma var.");
+
+            if (treeScripts.Any(s => s.Status != ScriptStatus.Ready))
                 return (false, $"\"{await BatchNameAsync(db, rootBatchId, cancellationToken)}\" altında aktif scriptlerin tamamı Hazır olmalı.");
 
             return (true, null);

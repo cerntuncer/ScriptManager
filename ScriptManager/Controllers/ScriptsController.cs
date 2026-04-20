@@ -180,12 +180,22 @@ namespace ScriptManager.Controllers
             if (script == null)
                 return NotFound(new { success = false, message = "Script bulunamadı." });
 
+            if ((newStatus == ScriptStatus.Ready || newStatus == ScriptStatus.PendingTesterReview) &&
+                script.Status == ScriptStatus.Conflict)
+            {
+                await _conflictSync.RecomputeScriptStatusAsync(script.Id);
+                script = await _db.Scripts.AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted && s.Status != ScriptStatus.Deleted);
+                if (script == null)
+                    return NotFound(new { success = false, message = "Script bulunamadı." });
+            }
+
             if (script.Status == ScriptStatus.Conflict)
                 return BadRequest(new
                 {
                     success = false,
                     message =
-                        "Script çakışma durumunda. Önce Çakışmalar sayfasından kaydı çözün veya SQL’i düzelttikten sonra tekrar deneyin."
+                        "Açık çakışma kaydı var. Çakışmalar sayfasından çözün veya SQL’i düzelttikten sonra tekrar deneyin."
                 });
 
             if (newStatus == ScriptStatus.PendingTesterReview)

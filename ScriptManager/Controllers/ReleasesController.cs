@@ -155,8 +155,9 @@ namespace ScriptManager.Controllers
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Geçersiz istek gövdesi." });
 
             var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
-
             var createdBy = uid;
+            if (!await _db.Users.AsNoTracking().AnyAsync(u => u.Id == createdBy && !u.IsDeleted))
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Oturum kullanıcısı geçersiz." });
 
             if (string.IsNullOrWhiteSpace(body.Name))
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Release adı girin." });
@@ -193,8 +194,34 @@ namespace ScriptManager.Controllers
                     if (!await BatchTreeHelper.EntireSubtreeIsOrphanAsync(_db, rootId))
                         return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Seçilen ağaç başka release'e bağlı." });
 
-                    // Versiyon içindeki tüm scriptler Hazır olmalı
+                    // Versiyon içindeki tüm scriptler Hazır olmalı; açık çakışma kaydı olmamalı
                     var allBatchIds = await BatchTreeHelper.CollectSubtreeIdsAsync(_db, rootId);
+                    var scriptIdsInTree = await _db.Scripts.AsNoTracking()
+                        .Where(s => !s.IsDeleted
+                            && s.Status != ScriptStatus.Deleted
+                            && s.BatchId.HasValue && allBatchIds.Contains(s.BatchId.Value))
+                        .Select(s => s.Id)
+                        .ToListAsync();
+                    if (scriptIdsInTree.Count > 0)
+                    {
+                        var idSet = scriptIdsInTree.ToHashSet();
+                        var openConflict = await _db.Conflicts.AsNoTracking()
+                            .AnyAsync(c =>
+                                !c.IsDeleted &&
+                                c.ResolvedAt == null &&
+                                (idSet.Contains(c.ScriptId) || idSet.Contains(c.ConflictingScriptId)));
+                        if (openConflict)
+                        {
+                            await tx.RollbackAsync();
+                            return BadRequest(new CreateReleaseJsonResponse
+                            {
+                                Success = false,
+                                Message =
+                                    "Seçilen versiyonda çözülmemiş çakışma var. Çakışmalar sayfasından kayıtları kapatın; ardından tüm scriptleri Hazır yapın."
+                            });
+                        }
+                    }
+
                     var notReadyCount = await _db.Scripts
                         .CountAsync(s => !s.IsDeleted
                             && s.Status != ScriptStatus.Deleted
@@ -206,7 +233,8 @@ namespace ScriptManager.Controllers
                         return BadRequest(new CreateReleaseJsonResponse
                         {
                             Success = false,
-                            Message = $"Versiyonda {notReadyCount} Taslak/Çakışma durumunda script var. Sürüm oluşturmadan önce tüm scriptler Hazır olmalı."
+                            Message =
+                                $"Versiyonda {notReadyCount} adet Hazır olmayan script var (Taslak, testçi incelemesi veya çakışma). Sürüme almadan önce çakışmaları çözüp tüm scriptleri Hazır yapın."
                         });
                     }
 
