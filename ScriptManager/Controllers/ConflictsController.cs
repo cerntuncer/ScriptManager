@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using BLL.Services;
 using DAL.Context;
+using DAL.Entities;
 using DAL.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -92,6 +93,95 @@ public class ConflictsController : Controller
         v == (int)ConflictCloseReason.SqlUpdated
             ? ConflictCloseReason.SqlUpdated
             : ConflictCloseReason.NoSqlChange;
+    private static async Task<Conflict?> FindOpenConflictRowAsync(
+        MyContext db,
+        long conflictId,
+        long pairMin,
+        long pairMax,
+        CancellationToken cancellationToken = default)
+    {
+        var q = db.Conflicts.Where(c => !c.IsDeleted && c.ResolvedAt == null);
+
+        var row = await q.FirstOrDefaultAsync(c => c.Id == conflictId, cancellationToken);
+        if (row != null) return row;
+
+        row = await q.FirstOrDefaultAsync(
+            c => c.ScriptId == pairMin && c.ConflictingScriptId == pairMax,
+            cancellationToken);
+        if (row != null) return row;
+
+        return await q.FirstOrDefaultAsync(
+            c => c.ScriptId == pairMax && c.ConflictingScriptId == pairMin,
+            cancellationToken);
+    }
+
+    private static async Task<bool> PairHasOpenConflictAsync(
+        MyContext db,
+        long pairMin,
+        long pairMax,
+        CancellationToken cancellationToken = default)
+    {
+        var q = db.Conflicts.Where(c => !c.IsDeleted && c.ResolvedAt == null);
+        return await q.AnyAsync(
+                   c => c.ScriptId == pairMin && c.ConflictingScriptId == pairMax,
+                   cancellationToken)
+               || await q.AnyAsync(
+                   c => c.ScriptId == pairMax && c.ConflictingScriptId == pairMin,
+                   cancellationToken);
+    }
+
+    private async Task<(List<long> Touched, IActionResult? Error)> TryApplyReviewScriptUpdatesAsync(
+        SaveConflictReviewRequest body,
+        HashSet<long> allowed)
+    {
+        var touched = new List<long>();
+
+        foreach (var u in body.Updates ?? new List<ScriptSqlUpdateItem>())
+        {
+            if (u.ScriptId <= 0 || !allowed.Contains(u.ScriptId))
+                return (touched, BadRequest(new { success = false, message = "Bu çakışmaya ait olmayan script güncellenemez." }));
+
+            var script = await _db.Scripts.FirstOrDefaultAsync(s =>
+                s.Id == u.ScriptId && !s.IsDeleted && s.Status != ScriptStatus.Deleted);
+
+            if (script == null)
+                return (touched, BadRequest(new { success = false, message = $"Script #{u.ScriptId} bulunamadı." }));
+
+            var wantedSql = (u.SqlScript ?? string.Empty).Trim();
+            var wantedRb = string.IsNullOrWhiteSpace(u.RollbackScript) ? null : u.RollbackScript.Trim();
+            var curRb = script.RollbackScript;
+
+            var unchanged =
+                string.Equals(script.SqlScript?.Trim() ?? "", wantedSql, StringComparison.Ordinal) &&
+                string.Equals(curRb?.Trim() ?? "", wantedRb?.Trim() ?? "", StringComparison.Ordinal);
+
+            if (unchanged)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(wantedSql))
+                return (touched, BadRequest(new { success = false, message = "SQL metni boş olamaz." }));
+
+            script.SqlScript = wantedSql;
+            script.RollbackScript = wantedRb;
+            script.UpdatedAt = DateTime.UtcNow;
+            _db.Scripts.Update(script);
+            touched.Add(script.Id);
+        }
+
+        return (touched, null);
+    }
+
+    private static ConflictCloseReason ResolveSaveReviewCloseReason(
+        SaveConflictReviewRequest body,
+        IReadOnlyList<long> touched)
+    {
+        if (touched.Count > 0)
+            return ConflictCloseReason.SqlUpdated;
+        if (body.CloseReason.HasValue &&
+            Enum.IsDefined(typeof(ConflictCloseReason), body.CloseReason.Value))
+            return (ConflictCloseReason)body.CloseReason.Value;
+        return ConflictCloseReason.NoSqlChange;
+    }
 
     private async Task<object?> BuildRecentResolvedPayloadAsync(long scriptId, long otherScriptId,
         ConflictCloseReason reason, long resolvedByUserId)
@@ -180,47 +270,11 @@ public class ConflictsController : Controller
         await using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
-            var touched = new List<long>();
-
-            foreach (var u in body.Updates ?? new List<ScriptSqlUpdateItem>())
+            var (touched, updateError) = await TryApplyReviewScriptUpdatesAsync(body, allowed);
+            if (updateError != null)
             {
-                if (u.ScriptId <= 0 || !allowed.Contains(u.ScriptId))
-                {
-                    await tx.RollbackAsync();
-                    return BadRequest(new { success = false, message = "Bu çakışmaya ait olmayan script güncellenemez." });
-                }
-
-                var script = await _db.Scripts.FirstOrDefaultAsync(s =>
-                    s.Id == u.ScriptId && !s.IsDeleted && s.Status != ScriptStatus.Deleted);
-
-                if (script == null)
-                {
-                    await tx.RollbackAsync();
-                    return BadRequest(new { success = false, message = $"Script #{u.ScriptId} bulunamadı." });
-                }
-
-                var wantedSql = (u.SqlScript ?? string.Empty).Trim();
-                var wantedRb = string.IsNullOrWhiteSpace(u.RollbackScript) ? null : u.RollbackScript.Trim();
-                var curRb = script.RollbackScript;
-
-                var same =
-                    string.Equals(script.SqlScript?.Trim() ?? "", wantedSql, StringComparison.Ordinal) &&
-                    string.Equals(curRb?.Trim() ?? "", wantedRb?.Trim() ?? "", StringComparison.Ordinal);
-
-                if (same)
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(wantedSql))
-                {
-                    await tx.RollbackAsync();
-                    return BadRequest(new { success = false, message = "SQL metni boş olamaz." });
-                }
-
-                script.SqlScript = wantedSql;
-                script.RollbackScript = wantedRb;
-                script.UpdatedAt = DateTime.UtcNow;
-                _db.Scripts.Update(script);
-                touched.Add(script.Id);
+                await tx.RollbackAsync();
+                return updateError;
             }
 
             await _db.SaveChangesAsync();
@@ -234,20 +288,8 @@ public class ConflictsController : Controller
             object? recentResolved = null;
             if (body.MarkResolved)
             {
-                ConflictCloseReason closeReason;
-                if (touched.Count > 0)
-                    closeReason = ConflictCloseReason.SqlUpdated;
-                else if (body.CloseReason.HasValue &&
-                         Enum.IsDefined(typeof(ConflictCloseReason), body.CloseReason.Value))
-                    closeReason = (ConflictCloseReason)body.CloseReason.Value;
-                else
-                    closeReason = ConflictCloseReason.NoSqlChange;
-
-                var rowToClose = await _db.Conflicts.FirstOrDefaultAsync(c =>
-                    !c.IsDeleted &&
-                    c.ResolvedAt == null &&
-                    Math.Min(c.ScriptId, c.ConflictingScriptId) == pairMin &&
-                    Math.Max(c.ScriptId, c.ConflictingScriptId) == pairMax);
+                var closeReason = ResolveSaveReviewCloseReason(body, touched);
+                var rowToClose = await FindOpenConflictRowAsync(_db, body.ConflictId, pairMin, pairMax);
 
                 if (rowToClose != null)
                     await _conflictSync.RemoveOpenConflictWithDismissalAsync(rowToClose.Id, uid, closeReason);
@@ -258,12 +300,7 @@ public class ConflictsController : Controller
                     recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeReason, uid);
             }
 
-            var stillOpen = await _db.Conflicts
-                .AnyAsync(c =>
-                    !c.IsDeleted &&
-                    c.ResolvedAt == null &&
-                    Math.Min(c.ScriptId, c.ConflictingScriptId) == pairMin &&
-                    Math.Max(c.ScriptId, c.ConflictingScriptId) == pairMax);
+            var stillOpen = await PairHasOpenConflictAsync(_db, pairMin, pairMax);
 
             // Çakışma sync tarafından otomatik kaldırıldıysa çözümlendi olarak işaretle
             if (!body.MarkResolved && !stillOpen && touched.Count > 0)

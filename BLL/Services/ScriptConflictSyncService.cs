@@ -194,24 +194,39 @@ public class ScriptConflictSyncService : IScriptConflictSyncService
             _db.Conflicts.Update(p);
         }
 
-        row.ScriptId = min;
-        row.ConflictingScriptId = max;
-        row.ResolvedBy = resolvedByUserId;
-        row.ResolvedAt = now;
-        row.CloseReason = closeReason;
-        row.UpdatedAt = now;
+        var openForPair = await _db.Conflicts
+            .Where(c =>
+                !c.IsDeleted &&
+                c.ResolvedAt == null &&
+                ((c.ScriptId == min && c.ConflictingScriptId == max) ||
+                 (c.ScriptId == max && c.ConflictingScriptId == min)))
+            .OrderBy(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        if (openForPair.Count == 0)
+            return;
+
+        string? hashMin = null;
+        string? hashMax = null;
         if (sMin != null && sMax != null)
         {
-            row.ResolvedSqlHashScript = ScriptSqlFingerprint.Compute(sMin);
-            row.ResolvedSqlHashConflictingScript = ScriptSqlFingerprint.Compute(sMax);
-        }
-        else
-        {
-            row.ResolvedSqlHashScript = null;
-            row.ResolvedSqlHashConflictingScript = null;
+            hashMin = ScriptSqlFingerprint.Compute(sMin);
+            hashMax = ScriptSqlFingerprint.Compute(sMax);
         }
 
-        _db.Conflicts.Update(row);
+        foreach (var c in openForPair)
+        {
+            c.ScriptId = min;
+            c.ConflictingScriptId = max;
+            c.ResolvedBy = resolvedByUserId;
+            c.ResolvedAt = now;
+            c.CloseReason = closeReason;
+            c.UpdatedAt = now;
+            c.ResolvedSqlHashScript = hashMin;
+            c.ResolvedSqlHashConflictingScript = hashMax;
+            _db.Conflicts.Update(c);
+        }
+
         await _db.SaveChangesAsync(cancellationToken);
     }
 

@@ -39,19 +39,38 @@ namespace BLL.Features.Scripts.Commands
             if (script == null)
                 return new UpdateScriptResponse { Success = false, Message = "Script bulunamadı." };
 
-            if (request.SqlScript != null || request.RollbackScript != null)
+            string? sqlApply = null;
+            string? rbApply = null;
+            var rbTouched = false;
+
+            if (request.SqlScript != null)
+            {
+                sqlApply = request.SqlScript.Trim();
+                if (string.IsNullOrEmpty(sqlApply))
+                    return new UpdateScriptResponse { Success = false, Message = "SQL boş olamaz." };
+            }
+
+            if (request.RollbackScript != null)
+            {
+                rbTouched = true;
+                rbApply = string.IsNullOrWhiteSpace(request.RollbackScript)
+                    ? null
+                    : request.RollbackScript.Trim();
+            }
+
+            if (sqlApply != null || rbApply != null)
             {
                 var syntaxIssues = new List<SqlScriptSyntaxIssue>();
-                if (request.SqlScript != null)
+                if (sqlApply != null)
                 {
-                    var sqlR = _sqlSyntax.Validate(request.SqlScript, "SQL");
+                    var sqlR = _sqlSyntax.Validate(sqlApply, "SQL");
                     if (!sqlR.IsValid)
                         syntaxIssues.AddRange(sqlR.Issues);
                 }
 
-                if (request.RollbackScript != null)
+                if (rbApply != null)
                 {
-                    var rbR = _sqlSyntax.Validate(request.RollbackScript, "Rollback");
+                    var rbR = _sqlSyntax.Validate(rbApply, "Rollback");
                     if (!rbR.IsValid)
                         syntaxIssues.AddRange(rbR.Issues);
                 }
@@ -150,10 +169,10 @@ namespace BLL.Features.Scripts.Commands
 
             if (request.Name != null)
                 script.Name = request.Name;
-            if (request.SqlScript != null)
-                script.SqlScript = request.SqlScript;
-            if (request.RollbackScript != null)
-                script.RollbackScript = request.RollbackScript;
+            if (sqlApply != null)
+                script.SqlScript = sqlApply;
+            if (rbTouched)
+                script.RollbackScript = rbApply;
             if (shouldMoveBatch)
                 script.BatchId = targetBatch?.Id;
             script.Status = newStatus;

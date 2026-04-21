@@ -324,14 +324,22 @@ namespace ScriptManager.Controllers
             if (!AuthHelper.CanEditDraftScriptContent(User, script.DeveloperId, script.Status))
                 return StatusCode(403, new { success = false, message = "Bu scripti düzenleme yetkiniz yok veya bu durumda düzenlenemez." });
 
-            script.Name = body.Name.Trim();
-            script.SqlScript = body.SqlScript;
-            script.RollbackScript = string.IsNullOrWhiteSpace(body.RollbackScript) ? null : body.RollbackScript;
+            var uid = await AuthHelper.GetActorUserIdAsync(User, _db);
+            var rbForRequest = string.IsNullOrWhiteSpace(body.RollbackScript) ? "" : body.RollbackScript.Trim();
 
-            await _db.SaveChangesAsync();
-            await _conflictSync.SyncAfterScriptSavedAsync(script.Id);
+            var result = await _mediator.Send(new UpdateScriptRequest
+            {
+                ScriptId = body.ScriptId,
+                UserId = uid,
+                Name = body.Name.Trim(),
+                SqlScript = body.SqlScript,
+                RollbackScript = rbForRequest
+            });
 
-            return Json(new { success = true, message = "Script güncellendi." });
+            if (!result.Success)
+                return BadRequest(new { success = false, message = result.Message ?? "Güncelleme başarısız." });
+
+            return Json(new { success = true, message = result.Message ?? "Script güncellendi." });
         }
 
         [HttpGet]
