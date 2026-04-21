@@ -15,11 +15,13 @@ public class ConflictsController : Controller
 {
     private readonly MyContext _db;
     private readonly IScriptConflictSyncService _conflictSync;
+    private readonly ISqlScriptSyntaxValidator _sqlSyntax;
 
-    public ConflictsController(MyContext db, IScriptConflictSyncService conflictSync)
+    public ConflictsController(MyContext db, IScriptConflictSyncService conflictSync, ISqlScriptSyntaxValidator sqlSyntax)
     {
         _db = db;
         _conflictSync = conflictSync;
+        _sqlSyntax = sqlSyntax;
     }
 
     public async Task<IActionResult> Index()
@@ -83,6 +85,7 @@ public class ConflictsController : Controller
 
     public class ResolveConflictForm
     {
+        [JsonPropertyName("conflictId")]
         public long ConflictId { get; set; }
 
         [JsonPropertyName("resolutionKind")]
@@ -93,28 +96,6 @@ public class ConflictsController : Controller
         v == (int)ConflictCloseReason.SqlUpdated
             ? ConflictCloseReason.SqlUpdated
             : ConflictCloseReason.NoSqlChange;
-    private static async Task<Conflict?> FindOpenConflictRowAsync(
-        MyContext db,
-        long conflictId,
-        long pairMin,
-        long pairMax,
-        CancellationToken cancellationToken = default)
-    {
-        var q = db.Conflicts.Where(c => !c.IsDeleted && c.ResolvedAt == null);
-
-        var row = await q.FirstOrDefaultAsync(c => c.Id == conflictId, cancellationToken);
-        if (row != null) return row;
-
-        row = await q.FirstOrDefaultAsync(
-            c => c.ScriptId == pairMin && c.ConflictingScriptId == pairMax,
-            cancellationToken);
-        if (row != null) return row;
-
-        return await q.FirstOrDefaultAsync(
-            c => c.ScriptId == pairMax && c.ConflictingScriptId == pairMin,
-            cancellationToken);
-    }
-
     private static async Task<bool> PairHasOpenConflictAsync(
         MyContext db,
         long pairMin,
@@ -160,6 +141,26 @@ public class ConflictsController : Controller
 
             if (string.IsNullOrWhiteSpace(wantedSql))
                 return (touched, BadRequest(new { success = false, message = "SQL metni boş olamaz." }));
+
+            var syntaxIssues = new List<SqlScriptSyntaxIssue>();
+            var sqlVal = _sqlSyntax.Validate(wantedSql, "SQL");
+            if (!sqlVal.IsValid)
+                syntaxIssues.AddRange(sqlVal.Issues);
+            if (wantedRb != null)
+            {
+                var rbVal = _sqlSyntax.Validate(wantedRb, "Rollback");
+                if (!rbVal.IsValid)
+                    syntaxIssues.AddRange(rbVal.Issues);
+            }
+
+            if (syntaxIssues.Count > 0)
+            {
+                return (touched, BadRequest(new
+                {
+                    success = false,
+                    message = "T-SQL sözdizimi hataları:\n" + SqlScriptSyntaxValidator.FormatIssueList(syntaxIssues)
+                }));
+            }
 
             script.SqlScript = wantedSql;
             script.RollbackScript = wantedRb;
@@ -289,14 +290,22 @@ public class ConflictsController : Controller
             if (body.MarkResolved)
             {
                 var closeReason = ResolveSaveReviewCloseReason(body, touched);
-                var rowToClose = await FindOpenConflictRowAsync(_db, body.ConflictId, pairMin, pairMax);
+                // Sync önce çalıştığı için orijinal conflictId ile satır silinmiş olabilir; çift için kalan her açık kaydı kapat.
+                var rowToClose = await _db.Conflicts
+                    .Where(c =>
+                        !c.IsDeleted &&
+                        c.ResolvedAt == null &&
+                        ((c.ScriptId == pairMin && c.ConflictingScriptId == pairMax) ||
+                         (c.ScriptId == pairMax && c.ConflictingScriptId == pairMin)))
+                    .OrderBy(c => c.Id)
+                    .FirstOrDefaultAsync();
 
                 if (rowToClose != null)
                     await _conflictSync.RemoveOpenConflictWithDismissalAsync(rowToClose.Id, uid, closeReason);
 
                 await _conflictSync.RecomputeScriptsAfterConflictChangeAsync(sidA, sidB);
 
-                if (rowToClose != null)
+                if (!await PairHasOpenConflictAsync(_db, pairMin, pairMax))
                     recentResolved = await BuildRecentResolvedPayloadAsync(sidA, sidB, closeReason, uid);
             }
 

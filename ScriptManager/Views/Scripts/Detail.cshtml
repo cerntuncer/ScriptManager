@@ -168,6 +168,7 @@
 @section Scripts {
     <script>
         const __scriptUpdateUrl = "@Url.Action("Update", "Scripts")";
+        const __scriptValidateSqlUrl = "@Url.Action("ValidateSql", "Scripts")";
         const __scriptChangeStatusUrl = "@Url.Action("ChangeStatus", "Scripts")";
         async function changeScriptStatus(scriptId, newStatus) {
             const res = await fetch(__scriptChangeStatusUrl, {
@@ -198,6 +199,27 @@
             const sql      = document.getElementById("editSql")?.value;
             const rollback = document.getElementById("editRollback")?.value;
             if (!name || !sql?.trim()) { showToast("Ad ve SQL zorunludur.", "error"); return; }
+
+            try {
+                const valRes = await fetch(__scriptValidateSqlUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({ sqlScript: sql, rollbackScript: rollback || "" })
+                });
+                const valData = await valRes.json().catch(() => null);
+                if (!valRes.ok || !valData?.success) {
+                    showToast(valData?.message || "SQL doğrulanamadı.", "error");
+                    return;
+                }
+                if (!valData.isValid) {
+                    const lines = (valData.issues || []).map(i => (i.source && i.source !== "SQL" ? `(${i.source}) ` : "") + (i.message || ""));
+                    showToast(lines.length ? lines.join("\n") : "T-SQL sözdizimi hatalı.", "error");
+                    return;
+                }
+            } catch {
+                showToast("SQL doğrulama isteği gönderilemedi.", "error");
+                return;
+            }
 
             const res = await fetch(__scriptUpdateUrl, {
                 method: "POST",
