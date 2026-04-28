@@ -1,0 +1,199 @@
+@model List<BLL.Features.TargetEnvironments.Queries.TargetEnvironmentResponse>
+@using DAL.Enums
+@{
+    var envTypes = Enum.GetValues<EnvironmentType>()
+        .Select(e => new { value = (int)e, label = e.ToString() })
+        .ToList();
+}
+
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Hedef Ortamlar</h1>
+        <p class="page-sub text-muted mb-0 small">
+            Her dış projenin veritabanı bağlantısını buradan tanımlayın.
+            Script şema doğrulaması bu ortamlara karşı yapılır.
+        </p>
+    </div>
+    <div class="page-actions">
+        <button type="button" class="btn btn-primary modern-btn text-white" onclick="openEnvModal(null)">
+            Yeni ortam ekle
+        </button>
+    </div>
+</div>
+
+<div class="panel-card">
+    <div class="panel-header">
+        <h3>Kayıtlı ortamlar</h3>
+    </div>
+    <div class="table-toolbar">
+        <input id="envFilterInput" class="table-filter-input" placeholder="Proje veya ortam ara..." />
+    </div>
+    <div class="table-wrap custom-scroll">
+        <table class="modern-table" id="envTable">
+            <thead>
+                <tr>
+                    <th>Proje</th>
+                    <th>Ortam</th>
+                    <th>Açıklama</th>
+                    <th>Eklenme</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="envTableBody">
+                @foreach (var env in Model)
+                {
+                    <tr data-id="@env.Id">
+                        <td class="fw-semibold">@env.ProjectName</td>
+                        <td><span class="badge text-bg-secondary">@env.EnvironmentTypeName</span></td>
+                        <td class="text-muted small">@(env.Description ?? "—")</td>
+                        <td class="text-muted small">@env.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-table"
+                                    onclick='openEnvModal(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
+                                        id = env.Id,
+                                        projectName = env.ProjectName,
+                                        environmentType = (int)env.EnvironmentType,
+                                        connectionString = env.ConnectionString,
+                                        description = env.Description ?? ""
+                                    })))'>
+                                Düzenle
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="deleteEnv(@env.Id, this)">
+                                Sil
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (!Model.Any())
+        {
+            <p class="text-muted text-center py-4">Henüz kayıtlı ortam yok.</p>
+        }
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="envModal" tabindex="-1" aria-labelledby="envModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="envModalLabel">Ortam</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="envId" />
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Proje adı <span class="text-danger">*</span></label>
+                    <input type="text" id="envProjectName" class="form-control" placeholder="örn. MuhasebeApp, HRPortal" maxlength="200" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Ortam tipi <span class="text-danger">*</span></label>
+                    <select id="envType" class="form-select">
+                        @foreach (var et in envTypes)
+                        {
+                            <option value="@et.value">@et.label</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Bağlantı dizesi (Connection String) <span class="text-danger">*</span></label>
+                    <input type="text" id="envConnectionString" class="form-control font-monospace"
+                           placeholder="Server=...;Database=...;Trusted_Connection=True;" maxlength="1000" />
+                    <div class="form-text text-muted small">SQL Server bağlantı dizesi. Düz metin olarak saklanır. Tırnak işareti <strong>eklemeyin</strong>.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Açıklama</label>
+                    <input type="text" id="envDescription" class="form-control" placeholder="opsiyonel" maxlength="500" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary" id="envSaveBtn" onclick="saveEnv()">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const __envUrls = {
+            create: "@Url.Action("Create", "TargetEnvironments")",
+            update: "@Url.Action("Update", "TargetEnvironments")",
+            delete: "@Url.Action("Delete", "TargetEnvironments")"
+        };
+
+        setupTableFilter("envFilterInput", "#envTable tbody tr");
+
+        let _envModal = null;
+        function getEnvModal() {
+            if (!_envModal) _envModal = new bootstrap.Modal(document.getElementById("envModal"));
+            return _envModal;
+        }
+
+        function openEnvModal(env) {
+            document.getElementById("envId").value = env?.id ?? "";
+            document.getElementById("envProjectName").value = env?.projectName ?? "";
+            document.getElementById("envType").value = env?.environmentType ?? 1;
+            document.getElementById("envConnectionString").value = env?.connectionString ?? "";
+            document.getElementById("envDescription").value = env?.description ?? "";
+            document.getElementById("envModalLabel").textContent = env?.id ? "Ortamı Düzenle" : "Yeni Ortam Ekle";
+            getEnvModal().show();
+        }
+
+        async function saveEnv() {
+            const id = document.getElementById("envId").value;
+            const projectName = document.getElementById("envProjectName").value.trim();
+            const environmentType = parseInt(document.getElementById("envType").value);
+            const connectionString = document.getElementById("envConnectionString").value.trim();
+            const description = document.getElementById("envDescription").value.trim();
+
+            if (!projectName) { showToast("Proje adı zorunludur.", "error"); return; }
+            if (!connectionString) { showToast("Bağlantı dizesi zorunludur.", "error"); return; }
+
+            const btn = document.getElementById("envSaveBtn");
+            btn.disabled = true;
+            try {
+                const isEdit = !!id;
+                const url = isEdit ? `${__envUrls.update}/${id}` : __envUrls.create;
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ projectName, environmentType, connectionString, description: description || null })
+                });
+                const data = await res.json().catch(() => null);
+                if (!res.ok || data?.success === false) {
+                    showToast(data?.message || "Kaydedilemedi.", "error");
+                    return;
+                }
+                showToast(data?.message || "Kaydedildi.", "success");
+                getEnvModal().hide();
+                setTimeout(() => window.location.reload(), 800);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function deleteEnv(id, btn) {
+            if (!confirm("Bu ortamı silmek istediğinizden emin misiniz?")) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${__envUrls.delete}/${id}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
+                });
+                const data = await res.json().catch(() => null);
+                if (!res.ok || data?.success === false) {
+                    showToast(data?.message || "Silinemedi.", "error");
+                    return;
+                }
+                showToast(data?.message || "Silindi.", "success");
+                const row = document.querySelector(`#envTable tr[data-id="${id}"]`);
+                if (row) row.remove();
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+}

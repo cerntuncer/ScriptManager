@@ -160,9 +160,18 @@ namespace ScriptManager.Controllers
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Oturum kullanıcısı geçersiz." });
 
             if (string.IsNullOrWhiteSpace(body.Name))
-                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Release adı girin." });
+                return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Sürüm adı girin." });
             if (string.IsNullOrWhiteSpace(body.Version))
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Versiyon girin." });
+
+            // Semantic versioning formatı zorunlu: v{major}.{minor}.{patch} veya v{major}.{minor}.{patch}-{tag}
+            if (!System.Text.RegularExpressions.Regex.IsMatch(body.Name.Trim(),
+                    @"^v\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$"))
+                return BadRequest(new CreateReleaseJsonResponse
+                {
+                    Success = false,
+                    Message = "Sürüm adı geçersiz format. Örnek: v1.0.0 veya v1.0.0-hotfix"
+                });
 
             if (await _db.Releases.AnyAsync(r => !r.IsDeleted && r.Version == body.Version))
                 return BadRequest(new CreateReleaseJsonResponse { Success = false, Message = "Bu versiyon zaten kullanılıyor." });

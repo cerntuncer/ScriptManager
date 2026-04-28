@@ -31,6 +31,10 @@
     <a class="nav-link-item @(currentController == "Conflicts" ? "active" : "")"
        href="@Url.Action("Index", "Conflicts")"
        data-tooltip="Çakışan scriptlerin listesi">Çakışmalar</a>
+
+    <a class="nav-link-item @(currentController == "TargetEnvironments" ? "active" : "")"
+       href="@Url.Action("Index", "TargetEnvironments")"
+       data-tooltip="Şema doğrulama için hedef DB ortamları">Hedef Ortamlar</a>
 </nav>
 
 <div class="sidebar-footer">

@@ -40,6 +40,8 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IScriptConflictSyncService, ScriptConflictSyncService>();
 builder.Services.AddSingleton<ISqlScriptSyntaxValidator>(_ =>
     new SqlScriptSyntaxValidator(_.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<ITargetEnvironmentRepository, TargetEnvironmentRepository>();
+builder.Services.AddScoped<ISchemaValidationService, SchemaValidationService>();
 
 // 🔥 JWT
 builder.Services.AddAuthentication("Bearer")

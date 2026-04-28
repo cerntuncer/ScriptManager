@@ -40,6 +40,12 @@
 
     @await Html.PartialAsync("_GlobalModal")
 
+    <script>
+        window.__appUrls = {
+            targetEnvironmentList: "@Url.Action("List", "TargetEnvironments")",
+            validateSchemaText: "@Url.Action("ValidateSchemaText", "Scripts")"
+        };
+    </script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/js/dashboard.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)

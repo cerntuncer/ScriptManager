@@ -18,13 +18,16 @@ namespace ScriptManager.Controllers
         private readonly IMediator _mediator;
         private readonly ISqlScriptSyntaxValidator _sqlSyntax;
         private readonly IScriptConflictSyncService _conflictSync;
+        private readonly ISchemaValidationService _schemaValidation;
 
-        public ScriptsController(MyContext db, IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax, IScriptConflictSyncService conflictSync)
+        public ScriptsController(MyContext db, IMediator mediator, ISqlScriptSyntaxValidator sqlSyntax,
+            IScriptConflictSyncService conflictSync, ISchemaValidationService schemaValidation)
         {
             _db = db;
             _mediator = mediator;
             _sqlSyntax = sqlSyntax;
             _conflictSync = conflictSync;
+            _schemaValidation = schemaValidation;
         }
 
         [HttpPost]
@@ -395,6 +398,56 @@ namespace ScriptManager.Controllers
                 peers        = peerDiag
             });
         }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ValidateSchemaText([FromBody] ValidateSchemaTextRequest? body, CancellationToken cancellationToken)
+        {
+            if (body == null || body.TargetEnvironmentId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            var result = await _schemaValidation.ValidateAsync(
+                body.SqlScript, body.RollbackScript, body.TargetEnvironmentId, cancellationToken);
+
+            return Json(BuildSchemaJson(result));
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ValidateSchema([FromBody] ValidateSchemaRequest? body, CancellationToken cancellationToken)
+        {
+            if (body == null || body.ScriptId <= 0 || body.TargetEnvironmentId <= 0)
+                return BadRequest(new { success = false, message = "Geçersiz istek." });
+
+            var script = await _db.Scripts.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == body.ScriptId && !s.IsDeleted, cancellationToken);
+            if (script == null)
+                return NotFound(new { success = false, message = "Script bulunamadı." });
+
+            var result = await _schemaValidation.ValidateAsync(
+                script.SqlScript, script.RollbackScript, body.TargetEnvironmentId, cancellationToken);
+
+            return Json(BuildSchemaJson(result));
+        }
+
+        private static object BuildSchemaJson(BLL.Services.SchemaValidationResult result) => new
+        {
+            success = true,
+            isValid = result.IsValid,
+            errorMessage = result.ErrorMessage,
+            tables = result.Tables.Select(t => new
+            {
+                tableName = t.TableName,
+                existsInDatabase = t.ExistsInDatabase,
+                scriptColumns = t.ScriptColumns.Select(c => new
+                {
+                    columnName = c.ColumnName,
+                    existsInDatabase = c.ExistsInDatabase,
+                    actualDataType = c.ActualDataType
+                }),
+                databaseColumns = t.DatabaseColumns
+            })
+        };
 
         [HttpPost]
         [IgnoreAntiforgeryToken]

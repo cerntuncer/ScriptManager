@@ -1290,6 +1290,15 @@ async function openScriptCreateWizard(preset) {
                 <textarea id="sqlScript" class="form-control font-monospace" rows="8" placeholder="CREATE / ALTER ..."></textarea>
             </div>
             <div class="col-md-12"><label class="form-label">Rollback (isteğe bağlı)</label><textarea id="rollbackScript" class="form-control font-monospace" rows="4"></textarea></div>
+            <div class="col-md-12">
+                <label class="form-label d-flex align-items-center gap-2">
+                    Hedef ortam <span class="text-muted small fw-normal">(şema kontrolü için — isteğe bağlı)</span>
+                </label>
+                <select id="swSchemaEnvId" class="form-select">
+                    <option value="">— Şema kontrolü yapma —</option>
+                </select>
+                <div id="swSchemaValidateBox" class="alert d-none small mb-0 mt-2" role="status"></div>
+            </div>
             <div id="swSqlValidateBox" class="col-12 alert d-none small mb-0" role="status"></div>
             <div class="col-12 d-flex justify-content-end flex-wrap gap-2 mt-3">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
@@ -1301,6 +1310,7 @@ async function openScriptCreateWizard(preset) {
 
     initWizardAutoValidate();
     void renderScriptWizardBatchPicker();
+    void loadSchemaEnvOptions("swSchemaEnvId");
 }
 
 async function openCreateScriptModal(batchId) {
@@ -1873,6 +1883,13 @@ async function submitCreateScript() {
             showToast("SQL sözdizimi hatalı; önce düzeltin.", "error");
             return;
         }
+        // Şema kontrolü (env seçildiyse bloklayan)
+        const envId = parseInt(document.getElementById("swSchemaEnvId")?.value || "0");
+        if (envId > 0) {
+            const schOk = await validateSchemaAndRender(
+                payload.sqlScript, payload.rollbackScript, envId, "swSchemaValidateBox");
+            if (!schOk) return;
+        }
     } else {
         const fromSelect = document.getElementById("scriptTargetBatchId");
         let batchId = null;
@@ -1983,9 +2000,14 @@ async function openCreateReleaseModal() {
     const content = `
         <form id="createReleaseForm" class="row g-3">
             <div class="col-12">
-                <label class="form-label fw-semibold">Sürüm adı</label>
+                <label class="form-label fw-semibold d-flex align-items-center gap-2">
+                    Sürüm adı
+                    <span id="releaseNameBadge" class="sw-sql-badge sw-sql-badge--idle">— format kontrol edilecek</span>
+                </label>
                 <input id="releaseName" class="form-control" autocomplete="off"
-                       placeholder="ör. v2.1.0, Nisan-Hotfix, 2026-04-16" />
+                       placeholder="ör. v1.0.0 veya v1.0.0-hotfix" />
+                <div class="form-text text-muted">Format: <code>v{major}.{minor}.{patch}</code> — ör. <code>v1.0.0</code>, <code>v2.3.1-hotfix</code>, <code>v3.0.0-sprint5</code></div>
+                <div id="releaseNameError" class="alert alert-danger small mt-1 py-2 d-none" role="alert"></div>
             </div>
             <div class="col-12">
                 <label class="form-label fw-semibold">Versiyon seç</label>
@@ -2010,6 +2032,47 @@ async function openCreateReleaseModal() {
     `;
 
     openGlobalModal("Yeni sürüm", content);
+
+    // Anlık format validasyonu
+    const nameInput = document.getElementById("releaseName");
+    if (nameInput) {
+        nameInput.addEventListener("input", () => {
+            validateReleaseNameFormat(nameInput.value.trim(), true);
+        });
+    }
+}
+
+/**
+ * Sürüm adını semantic versioning formatına göre doğrular.
+ * @param {string} name
+ * @param {boolean} [renderFeedback=false] - true ise badge ve hata kutusunu günceller
+ * @returns {boolean}
+ */
+function validateReleaseNameFormat(name, renderFeedback = false) {
+    const pattern = /^v\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$/;
+    const badge = document.getElementById("releaseNameBadge");
+    const errBox = document.getElementById("releaseNameError");
+    const isValid = pattern.test(name);
+
+    if (!renderFeedback) return isValid;
+
+    if (!name) {
+        if (badge) { badge.className = "sw-sql-badge sw-sql-badge--idle"; badge.textContent = "— format kontrol edilecek"; }
+        if (errBox) errBox.classList.add("d-none");
+        return isValid;
+    }
+
+    if (isValid) {
+        if (badge) { badge.className = "sw-sql-badge sw-sql-badge--ok"; badge.textContent = "✓ Format geçerli"; }
+        if (errBox) errBox.classList.add("d-none");
+    } else {
+        if (badge) { badge.className = "sw-sql-badge sw-sql-badge--error"; badge.textContent = "✗ Geçersiz format"; }
+        if (errBox) {
+            errBox.textContent = "Geçersiz format. Doğru örnekler: v1.0.0 · v2.3.1 · v1.0.0-hotfix · v2.0.0-sprint5";
+            errBox.classList.remove("d-none");
+        }
+    }
+    return isValid;
 }
 
 function appendReleaseRowFromCreateResponse(data) {
@@ -2069,6 +2132,10 @@ async function submitCreateRelease() {
         showToast("Sürüm adı zorunludur.", "error");
         return;
     }
+    if (!validateReleaseNameFormat(name, true)) {
+        showToast("Sürüm adı geçersiz format. Örnek: v1.0.0 veya v1.0.0-hotfix", "error");
+        return;
+    }
     if (!selectedVersionId) {
         showToast("Bir versiyon seçin.", "error");
         return;
@@ -2105,4 +2172,78 @@ async function submitCreateRelease() {
     appendReleaseRowFromCreateResponse(data);
     const modalEl = document.getElementById("globalAppModal");
     bootstrap.Modal.getInstance(modalEl)?.hide();
+}
+
+// ── Şema doğrulama yardımcı fonksiyonlar ──────────────────────────────────
+
+/** Hedef ortam seçeneğini doldurmak için ortam listesini yükler. */
+async function loadSchemaEnvOptions(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const url = window.__appUrls?.targetEnvironmentList;
+    if (!url) return;
+    try {
+        const res = await fetch(url);
+        const list = await res.json();
+        if (list.length === 0) {
+            sel.innerHTML = '<option value="">— Kayıtlı ortam yok —</option>';
+        } else {
+            sel.innerHTML = '<option value="">— Şema kontrolü yapma —</option>' +
+                list.map(e => `<option value="${e.id}">${escapeHtml(e.label)}</option>`).join("");
+        }
+    } catch {
+        sel.innerHTML = '<option value="">— Yüklenemedi —</option>';
+    }
+}
+
+/**
+ * Ham SQL metni + ortam ID ile şema doğrulaması yapar.
+ * Hata varsa boxId ile verilen elemana sonucu yazar ve false döner.
+ * @returns {Promise<boolean>} true = geçti, false = hata var (bloklansın)
+ */
+async function validateSchemaAndRender(sqlScript, rollbackScript, envId, boxId) {
+    const url = window.__appUrls?.validateSchemaText;
+    if (!url) return true; // URL yoksa sessizce geç
+
+    const box = document.getElementById(boxId);
+    if (box) { box.className = "alert alert-warning small mt-2"; box.textContent = "Şema kontrol ediliyor..."; box.classList.remove("d-none"); }
+
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sqlScript, rollbackScript: rollbackScript || null, targetEnvironmentId: envId })
+        });
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data) {
+            if (box) { box.className = "alert alert-danger small mt-2"; box.textContent = "Şema doğrulama isteği başarısız."; }
+            return false;
+        }
+
+        if (data.errorMessage) {
+            if (box) { box.className = "alert alert-danger small mt-2"; box.textContent = "Bağlantı hatası: " + data.errorMessage; }
+            return false;
+        }
+
+        if (!data.isValid) {
+            const missingTables = (data.tables || []).filter(t => !t.existsInDatabase).map(t => t.tableName);
+            const missingCols = (data.tables || [])
+                .filter(t => t.existsInDatabase)
+                .flatMap(t => (t.scriptColumns || []).filter(c => !c.existsInDatabase).map(c => `${t.tableName}.${c.columnName}`));
+
+            let msg = "⚠ Şema hatası — script kaydedilemez:\n";
+            if (missingTables.length) msg += `Bulunamayan tablolar: ${missingTables.join(", ")}\n`;
+            if (missingCols.length) msg += `Bulunamayan kolonlar: ${missingCols.join(", ")}`;
+
+            if (box) { box.className = "alert alert-danger small mt-2"; box.style.whiteSpace = "pre-line"; box.textContent = msg; }
+            return false;
+        }
+
+        if (box) { box.className = "alert alert-success small mt-2"; box.textContent = "✓ Şema kontrolü geçti — tüm tablolar ve kolonlar mevcut."; }
+        return true;
+    } catch (e) {
+        if (box) { box.className = "alert alert-danger small mt-2"; box.textContent = "Şema doğrulama hatası: " + e.message; }
+        return false;
+    }
 }

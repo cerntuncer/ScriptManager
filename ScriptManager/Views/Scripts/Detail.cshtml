@@ -25,7 +25,6 @@
     </div>
 </div>
 
-
 <div class="panel-card mb-4">
     <div class="panel-header">
         <h3 class="mb-0">Durum akışı</h3>
@@ -83,10 +82,10 @@
 {
     <div class="panel-card mb-4">
         <div class="panel-header">
-            <h3 class="mb-0">Etkilenen nesneler</h3>
+            <h3 class="mb-0">Etkilenen tablolar</h3>
         </div>
         <div class="p-3">
-                        <p class="small text-muted mb-2">Koddan otomatik tespit edildi.</p>
+            <p class="small text-muted mb-2">Koddan otomatik tespit edildi.</p>
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var tbl in Model.ReferencedTablesDisplay.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -110,15 +109,29 @@
                 <input id="editName" type="text" class="form-control" value="@Model.Name" maxlength="200" />
             </div>
             <div class="mb-3">
-                <label class="form-label fw-semibold small">SQL</label>
+                <label class="form-label fw-semibold small d-flex align-items-center gap-2">
+                    SQL
+                    <span id="editSqlBadge" class="sw-sql-badge sw-sql-badge--idle">— kontrol bekleniyor</span>
+                </label>
                 <textarea id="editSql" class="form-control font-monospace" rows="10" style="font-size:13px;">@Model.SqlScript</textarea>
+                <div id="editSqlValidateBox" class="alert d-none small mt-2 py-2" role="status"></div>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-semibold small">Rollback SQL <span class="text-muted">(opsiyonel)</span></label>
                 <textarea id="editRollback" class="form-control font-monospace" rows="5" style="font-size:13px;">@(Model.RollbackScript ?? "")</textarea>
             </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold small d-flex align-items-center gap-2">
+                    Hedef ortam
+                    <span class="text-muted fw-normal" style="font-size:11px">(şema kontrolü — seçilirse kaydetme bloklanır)</span>
+                </label>
+                <select id="editSchemaEnvId" class="form-select form-select-sm" style="max-width:360px">
+                    <option value="">— Şema kontrolü yapma —</option>
+                </select>
+                <div id="editSchemaBox" class="alert d-none small mt-2" role="status"></div>
+            </div>
             <div class="d-flex gap-2">
-                <button type="button" class="btn btn-primary" onclick="saveScriptEdit()">Kaydet</button>
+                <button type="button" class="btn btn-primary" id="editSaveBtn" onclick="saveScriptEdit()">Kaydet</button>
                 <button type="button" class="btn btn-light" onclick="toggleEditPanel()">İptal</button>
             </div>
         </div>
@@ -170,6 +183,8 @@
         const __scriptUpdateUrl = "@Url.Action("Update", "Scripts")";
         const __scriptValidateSqlUrl = "@Url.Action("ValidateSql", "Scripts")";
         const __scriptChangeStatusUrl = "@Url.Action("ChangeStatus", "Scripts")";
+        const __scriptDeleteUrl = "@Url.Action("Delete", "Scripts")";
+
         async function changeScriptStatus(scriptId, newStatus) {
             const res = await fetch(__scriptChangeStatusUrl, {
                 method: "POST",
@@ -177,9 +192,7 @@
                 body: JSON.stringify({ scriptId, newStatus })
             });
             let data = null;
-            try {
-                data = await res.json();
-            } catch (_) {}
+            try { data = await res.json(); } catch (_) {}
             if (!res.ok || data?.success === false) {
                 showToast(data?.message || "Durum güncellenemedi.", "error");
                 return;
@@ -188,10 +201,103 @@
             window.location.reload();
         }
 
+        // ── Canlı SQL syntax validation (edit formu) ───────────────────────
+        let __editValidationInited = false;
+
+        function renderEditSqlBox(data) {
+            const box   = document.getElementById("editSqlValidateBox");
+            const badge = document.getElementById("editSqlBadge");
+            const btn   = document.getElementById("editSaveBtn");
+
+            function setBadge(state, text) {
+                if (!badge) return;
+                badge.className = "sw-sql-badge sw-sql-badge--" + state;
+                badge.textContent = text;
+            }
+
+            if (!box) return;
+
+            if (!data || data.success === false) {
+                box.className = "alert alert-danger small mt-2 py-2";
+                box.classList.remove("d-none");
+                box.innerHTML = escapeHtml(data?.message || "Doğrulama hatası.");
+                setBadge("error", "✗ Hatalı");
+                if (btn) btn.disabled = true;
+                return;
+            }
+
+            if (data.isValid) {
+                box.className = "d-none";
+                setBadge("ok", "✓ SQL geçerli");
+                if (btn) btn.disabled = false;
+                return;
+            }
+
+            // Hatalar var
+            const items = (data.issues || []).map(i => {
+                const prefix = i.source && i.source !== "SQL" ? `(${i.source}) ` : "";
+                return escapeHtml(prefix + (i.message || ""));
+            });
+            box.className = "alert alert-danger small mt-2 py-2";
+            box.classList.remove("d-none");
+            box.innerHTML = items.map(t => `<div>${t}</div>`).join("") || "T-SQL sözdizimi hatalı.";
+            setBadge("error", "✗ Hatalı");
+            if (btn) btn.disabled = true;
+        }
+
+        function initEditFormValidation() {
+            if (__editValidationInited) return;
+            __editValidationInited = true;
+
+            const sqlEl = document.getElementById("editSql");
+            const rbEl  = document.getElementById("editRollback");
+            const badge = document.getElementById("editSqlBadge");
+            const box   = document.getElementById("editSqlValidateBox");
+            const btn   = document.getElementById("editSaveBtn");
+
+            if (!sqlEl) return;
+
+            const doValidate = debounce(async () => {
+                const sql = sqlEl.value ?? "";
+                const rb  = rbEl?.value ?? "";
+
+                if (!sql.trim()) {
+                    if (badge) { badge.className = "sw-sql-badge sw-sql-badge--idle"; badge.textContent = "— kontrol bekleniyor"; }
+                    if (box)   { box.className = "d-none"; }
+                    if (btn)   { btn.disabled = false; }
+                    return;
+                }
+
+                if (badge) { badge.className = "sw-sql-badge sw-sql-badge--checking"; badge.textContent = "⟳ kontrol ediliyor…"; }
+
+                try {
+                    const res  = await fetch(__scriptValidateSqlUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Accept: "application/json" },
+                        body: JSON.stringify({ sqlScript: sql, rollbackScript: rb })
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (!res.ok || !data) { renderEditSqlBox({ success: false, message: `HTTP ${res.status}` }); return; }
+                    renderEditSqlBox(data);
+                } catch {
+                    if (badge) { badge.className = "sw-sql-badge sw-sql-badge--idle"; badge.textContent = "— doğrulama yapılamadı"; }
+                }
+            }, 700);
+
+            sqlEl.addEventListener("input", doValidate);
+            rbEl?.addEventListener("input", doValidate);
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         function toggleEditPanel() {
             const panel = document.getElementById("editScriptPanel");
             if (!panel) return;
-            panel.style.display = panel.style.display === "none" ? "" : "none";
+            const opening = panel.style.display === "none";
+            panel.style.display = opening ? "" : "none";
+            if (opening) {
+                void loadSchemaEnvOptions("editSchemaEnvId");
+                initEditFormValidation();
+            }
         }
 
         async function saveScriptEdit() {
@@ -200,50 +306,66 @@
             const rollback = document.getElementById("editRollback")?.value;
             if (!name || !sql?.trim()) { showToast("Ad ve SQL zorunludur.", "error"); return; }
 
+            const saveBtn = document.getElementById("editSaveBtn");
+            saveBtn.disabled = true;
+
             try {
-                const valRes = await fetch(__scriptValidateSqlUrl, {
+                // 1) SQL sözdizimi kontrolü (bloklayan)
+                try {
+                    const valRes = await fetch(__scriptValidateSqlUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Accept: "application/json" },
+                        body: JSON.stringify({ sqlScript: sql, rollbackScript: rollback || "" })
+                    });
+                    const valData = await valRes.json().catch(() => null);
+                    if (!valRes.ok || !valData?.success) {
+                        renderEditSqlBox({ success: false, message: valData?.message || "SQL doğrulanamadı." });
+                        showToast("SQL sözdizimi hatalı; önce düzeltin.", "error");
+                        return;
+                    }
+                    renderEditSqlBox(valData);
+                    if (!valData.isValid) return;
+                } catch {
+                    showToast("SQL doğrulama isteği gönderilemedi.", "error");
+                    return;
+                }
+
+                // 2) Şema kontrolü (bloklayan — env seçildiyse)
+                const envId = parseInt(document.getElementById("editSchemaEnvId")?.value || "0");
+                if (envId > 0) {
+                    const schOk = await validateSchemaAndRender(sql, rollback || null, envId, "editSchemaBox");
+                    if (!schOk) return;
+                }
+
+                // 3) Kaydet
+                const res = await fetch(__scriptUpdateUrl, {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Accept: "application/json" },
-                    body: JSON.stringify({ sqlScript: sql, rollbackScript: rollback || "" })
+                    body: JSON.stringify({ scriptId: @Model.ScriptId, name, sqlScript: sql, rollbackScript: rollback || null })
                 });
-                const valData = await valRes.json().catch(() => null);
-                if (!valRes.ok || !valData?.success) {
-                    showToast(valData?.message || "SQL doğrulanamadı.", "error");
+                let data = null;
+                try { data = await res.json(); } catch { /* ignore */ }
+                if (!res.ok || data?.success === false) {
+                    showToast(data?.message || "Güncellenemedi.", "error");
                     return;
                 }
-                if (!valData.isValid) {
-                    const lines = (valData.issues || []).map(i => (i.source && i.source !== "SQL" ? `(${i.source}) ` : "") + (i.message || ""));
-                    showToast(lines.length ? lines.join("\n") : "T-SQL sözdizimi hatalı.", "error");
-                    return;
-                }
-            } catch {
-                showToast("SQL doğrulama isteği gönderilemedi.", "error");
-                return;
-            }
 
-            const res = await fetch(__scriptUpdateUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify({ scriptId: @Model.ScriptId, name, sqlScript: sql, rollbackScript: rollback || null })
-            });
-            let data = null;
-            try { data = await res.json(); } catch { /* ignore */ }
-            if (!res.ok || data?.success === false) {
-                showToast(data?.message || "Güncellenemedi.", "error"); return;
+                showToast("Script kaydedildi.", "success");
+                if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
+
+                const h1 = document.querySelector(".page-title");
+                if (h1) h1.textContent = name;
+                const sqlBlock = document.getElementById("sqlBlock");
+                if (sqlBlock) sqlBlock.textContent = sql;
+                const rbBlock = document.getElementById("rbBlock");
+                if (rbBlock) rbBlock.textContent = rollback || "";
+                document.getElementById("editScriptPanel").style.display = "none";
+
+            } finally {
+                saveBtn.disabled = false;
             }
-            showToast("Script güncellendi.", "success");
-            if (typeof refreshConflictCountBadge === "function") void refreshConflictCountBadge();
-            // Görüntülenen alanları güncelle
-            const h1 = document.querySelector(".page-title");
-            if (h1) h1.textContent = name;
-            const sqlBlock = document.getElementById("sqlBlock");
-            if (sqlBlock) sqlBlock.textContent = sql;
-            const rbBlock = document.getElementById("rbBlock");
-            if (rbBlock) rbBlock.textContent = rollback || "";
-            document.getElementById("editScriptPanel").style.display = "none";
         }
 
-        const __scriptDeleteUrl = "@Url.Action("Delete", "Scripts")";
         async function deleteScript(id) {
             if (!confirm("Bu script kalıcı olarak silinecek (durum: silindi). Emin misiniz?")) return;
             const res = await fetch(__scriptDeleteUrl + "/" + id, {

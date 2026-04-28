@@ -14,6 +14,7 @@ namespace DAL.Context
         public DbSet<Release> Releases { get; set; }
         public DbSet<Conflict> Conflicts { get; set; }
         public DbSet<Batch> Batches { get; set; }
+        public DbSet<TargetEnvironment> TargetEnvironments { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -25,6 +26,7 @@ namespace DAL.Context
             modelBuilder.ApplyConfiguration(new ReleaseMap());
             modelBuilder.ApplyConfiguration(new ConflictMap());
             modelBuilder.ApplyConfiguration(new BatchMap());
+            modelBuilder.ApplyConfiguration(new TargetEnvironmentMap());
         }
     }
 }
